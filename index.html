@@ -610,7 +610,24 @@
       Object.keys(CITY_COORDS||{}).sort().forEach(k=>{ const o=document.createElement('option'); o.value=k; dl.appendChild(o); });
     }
 
-    function getRoutesBounds(){
+    
+    function getVisibleRoutesBounds(){
+      try{
+        const group=L.featureGroup();
+        (ALL_LINES||[]).forEach(rec=>{
+          if(rec && rec.line && map.hasLayer(rec.line)){
+            const ll = rec.line.getLatLngs();
+            if(ll && ll.length){
+              group.addLayer(L.polyline(ll));
+            }
+          }
+        });
+        return group.getLayers().length ? clampBoundsToCity(group.getBounds()) : null;
+      }catch(e){
+        return null;
+      }
+    }
+function getRoutesBounds(){
       if(!ALL_LINES.length) return CITY_BOUNDS;
       let b=null;
       for(const rec of ALL_LINES){
@@ -644,9 +661,7 @@
         setTimeout(fin, timeoutMs);
       });
     }
-    async function withFittedRoutesView(cb){
-      const bounds=getRoutesBounds();
-      const prev={center:map.getCenter(), zoom:map.getZoom()};
+    async function withFittedRoutesView(cb){ const bounds=getVisibleRoutesBounds() || getRoutesBounds(); const prev={center:map.getCenter(), zoom:map.getZoom()};
       if(bounds){
         await fitBoundsAsync(bounds, 0.06);
         await waitTilesLoaded();
@@ -667,6 +682,8 @@
 
     async function exportPNG(){
       try{
+        map.closePopup();
+        if(!(ALL_LINES&&ALL_LINES.length)){ alert('Não há rotas no mapa para exportar.'); return; }
         hideUI(true);
         const dataUrl = await withFittedRoutesView(async ()=>{
           return await new Promise((resolve, reject)=>{
@@ -682,6 +699,8 @@
     }
     async function exportPDF(){
       try{
+        map.closePopup();
+        if(!(ALL_LINES&&ALL_LINES.length)){ alert('Não há rotas no mapa para exportar.'); return; }
         hideUI(true);
         const dataUrl = await withFittedRoutesView(async ()=>{
           return await new Promise((resolve, reject)=>{
