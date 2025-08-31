@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Mapa DWDM — v7 (cores seguras + export OK)</title>
+<title>Mapa DWDM — v8 (export viewport fix)</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
   :root{ --bg:#f6f7fb; --fg:#111; --muted:#374151; --card:#fff; --bd:#e5e7eb; }
@@ -585,7 +585,7 @@
       Object.keys(CITY_COORDS||{}).sort().forEach(k=>{ const o=document.createElement('option'); o.value=k; dl.appendChild(o); });
     }
 
-    /* ===================== EXPORT / CENTER ===================== */
+    /* ===================== EXPORT / CENTER (Viewport) ===================== */
     function getRoutesBounds(){ if(!ALL_LINES.length) return null; let b=null; for(const rec of ALL_LINES){ const lb=rec.line.getBounds(); b = b? b.extend(lb): L.latLngBounds(lb); } return b; }
     function fitBoundsAsync(bounds,pad=0.06){
       if(!bounds) return Promise.resolve();
@@ -603,8 +603,8 @@
     async function withFittedRoutesView(cb){
       const bounds=getRoutesBounds();
       const prev={center:map.getCenter(), zoom:map.getZoom()};
-      if(bounds) await fitBoundsAsync(bounds, 0.08);
-      await new Promise(r=>setTimeout(r,120));
+      if(bounds) await fitBoundsAsync(bounds, 0.06);
+      await new Promise(r=>setTimeout(r,150));
       try{ return await cb(); }
       finally{
         if(bounds){ await setViewAsync(prev.center, prev.zoom); await new Promise(r=>setTimeout(r,80)); }
@@ -614,96 +614,44 @@
       ['toolbar','legendClients'].forEach(id=>{ const el=$(id); if(el && el.style) el.style.visibility = hide?'hidden':'visible'; });
       document.querySelectorAll('.legend,.credit').forEach(el=> el.style.visibility = hide?'hidden':'visible');
     }
-
-    // --- captura dimensionada + conversão para JPEG/PNG ---
-    async function captureMapBlob(targetW=2560, targetH=1600){
-      const mapEl = document.getElementById('map');
-      const prev = { w: mapEl.style.width, h: mapEl.style.height };
-      mapEl.style.width  = targetW + 'px';
-      mapEl.style.height = targetH + 'px';
-      map.invalidateSize();
-      await new Promise(r=>setTimeout(r,80));
-      const blob = await screenshoter.takeScreen('blob');
-      mapEl.style.width  = prev.w;
-      mapEl.style.height = prev.h;
-      map.invalidateSize();
+    async function captureViewportBlob(){
+      const blob = await screenshoter.takeScreen('blob');  // captura o viewport atual
       return blob;
     }
-    async function blobToJPEGDataURL(blob, maxW=3000, maxH=2000, quality=0.92){
-      const img = new Image();
-      const url = URL.createObjectURL(blob);
-      await new Promise((res, rej)=>{ img.onload=res; img.onerror=rej; img.src=url; });
-      const scale = Math.min(1, maxW / img.width, maxH / img.height);
-      const w = Math.round(img.width * scale);
-      const h = Math.round(img.height * scale);
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      URL.revokeObjectURL(url);
-      return canvas.toDataURL('image/jpeg', quality);
+    async function blobToDataURL(blob){ return await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(blob); }); }
+    async function scaleDataURL(dataUrl, maxW, maxH, mime='image/png', quality=0.92){
+      const img=new Image(); img.crossOrigin='anonymous';
+      await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; img.src=dataUrl; });
+      const w=img.width, h=img.height;
+      const scale=Math.min(1, maxW/w, maxH/h);
+      const W=Math.round(w*scale), H=Math.round(h*scale);
+      const can=document.createElement('canvas'); can.width=W; can.height=H;
+      const ctx=can.getContext('2d'); ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
+      ctx.drawImage(img,0,0,W,H);
+      return can.toDataURL(mime,quality);
     }
-    async function blobToPNGDataURL(blob, maxW=3000, maxH=2000){
-      const img = new Image();
-      const url = URL.createObjectURL(blob);
-      await new Promise((res, rej)=>{ img.onload=res; img.onerror=rej; img.src=url; });
-      const scale = Math.min(1, maxW / img.width, maxH / img.height);
-      const w = Math.round(img.width * scale);
-      const h = Math.round(img.height * scale);
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      URL.revokeObjectURL(url);
-      return canvas.toDataURL('image/png');
-    }
-
     async function exportPNG(){
       try{
         hideUI(true);
-        const blob = await withFittedRoutesView(async ()=>{
-          return await captureMapBlob(2560, 1600);
-        });
+        const blob = await withFittedRoutesView(async ()=> await captureViewportBlob());
         hideUI(false);
-        const dataUrl = await blobToPNGDataURL(blob, 3000, 2000);
-        const a = document.createElement('a');
-        a.href = dataUrl; a.download = 'mapadwdm.png'; a.click();
-      }catch(e){
-        hideUI(false);
-        alert('Falha ao exportar PNG: ' + e.message);
-      }
+        const dataUrl = await scaleDataURL(await blobToDataURL(blob), 3000, 2000, 'image/png');
+        const a=document.createElement('a'); a.href=dataUrl; a.download='mapadwdm.png'; a.click();
+      }catch(e){ hideUI(false); alert('Falha ao exportar PNG: '+e.message); }
     }
-
     async function exportPDF(){
       try{
         hideUI(true);
-        const blob = await withFittedRoutesView(async ()=>{
-          return await captureMapBlob(3000, 2000);
-        });
+        const blob = await withFittedRoutesView(async ()=> await captureViewportBlob());
         hideUI(false);
-
-        const dataUrl = await blobToJPEGDataURL(blob, 3000, 2000, 0.92);
-
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a3', compress: true });
-
-        const W = pdf.internal.pageSize.getWidth();
-        const H = pdf.internal.pageSize.getHeight();
-        const M = 24; // margem
-
-        const img = new Image();
-        await new Promise(res => { img.onload = res; img.src = dataUrl; });
-
-        const w = W - 2*M;                    // preenche a largura
-        const h = w * img.height / img.width; // mantém proporção
-        const x = M, y = (H - h) / 2;         // centraliza verticalmente
-
-        pdf.addImage(dataUrl, 'JPEG', x, y, w, h);
-        pdf.save('mapadwdm.pdf');
-      }catch(e){
-        hideUI(false);
-        alert('Falha ao exportar PDF: ' + e.message);
-      }
+        const jpegUrl = await scaleDataURL(await blobToDataURL(blob), 3000, 2000, 'image/jpeg', 0.92);
+        const {jsPDF}=window.jspdf;
+        const pdf=new jsPDF({orientation:'landscape',unit:'pt',format:'a3',compress:true});
+        const W=pdf.internal.pageSize.getWidth(), H=pdf.internal.pageSize.getHeight(), M=24;
+        const img=new Image(); await new Promise(r=>{ img.onload=r; img.src=jpegUrl; });
+        const w=W-2*M, h=w*img.height/img.width, x=M, y=(H-h)/2;
+        pdf.addImage(jpegUrl,'JPEG',x,y,w,h); pdf.save('mapadwdm.pdf');
+      }catch(e){ hideUI(false); alert('Falha ao exportar PDF: '+e.message); }
     }
 
     /* ===================== UI ===================== */
@@ -776,7 +724,7 @@
       const unknown=saltos.filter(c=>!getCoord(c)); if(unknown.length){ $('addWarn').textContent='Cidade(s) não encontrada(s): '+unknown.join(', '); return; }
       if(!DATA) DATA={clientes:{}}; if(!DATA.clientes) DATA.clientes={};
       if(!DATA.clientes[cliente]){
-        const color = getOrCreateClientColor(cliente);   // cor estável/distinta
+        const color = getOrCreateClientColor(cliente);   // nova cor segura para novo cliente
         DATA.clientes[cliente] = { color, canais: [] };
       } else {
         if (DATA.clientes[cliente].color) registerUsedColor(DATA.clientes[cliente].color);
