@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Mapa DWDM — v11-fix (Canvas + anti-wrap)</title>
+<title>Mapa DWDM — v11 (Canvas + export centrado)</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
   :root{ --bg:#f6f7fb; --fg:#111; --muted:#374151; --card:#fff; --bd:#e5e7eb; }
@@ -90,8 +90,103 @@
   </div>
   <div class="credit">Afastamento automático nas rotas sobrepostas • Controles de zoom no canto inferior direito</div>
 
-  <!-- (Modais de adicionar/editar/nova cidade — idênticos à versão anterior) -->
-  <!-- ... para encurtar esta resposta, deixei os modais exatamente como estavam no seu v11; nada mudou neles ... -->
+  <!-- Modais -->
+  <div class="modal" id="modalAdd">
+    <div class="card">
+      <h3 style="margin:0 0 8px 0;">Adicionar canal</h3>
+      <div class="row"><label>Cliente</label><input id="addCliente" placeholder="ex.: NovoCliente"></div>
+      <div class="row"><label>ID do canal</label><input id="addId" placeholder="ex.: DWDM-CH40-FORTALEZA<>NATAL"></div>
+      <div class="row"><label>Tipo</label>
+        <select id="addTipo">
+          <option value="proprio">próprio</option>
+          <option value="cedido">cedido</option>
+          <option value="recebido">recebido</option>
+        </select>
+      </div>
+      <div class="row"><label>Capacidade</label>
+        <div class="pillset" id="addCaps">
+          <label><input type="radio" name="addCap" value="100G" checked><span>100G</span></label>
+          <label><input type="radio" name="addCap" value="200G"><span>200G</span></label>
+          <label><input type="radio" name="addCap" value="300G"><span>300G</span></label>
+          <label><input type="radio" name="addCap" value="400G"><span>400G</span></label>
+          <label><input type="radio" name="addCap" value="600G"><span>600G</span></label>
+          <label><input type="radio" name="addCap" value="800G"><span>800G</span></label>
+        </div>
+      </div>
+      <div class="row"><label>Parceiro</label><input id="addParc" placeholder="habilita quando cedido/recebido" disabled></div>
+      <div class="row"><label>Saltos</label>
+        <div style="flex:1">
+          <div class="chips" id="addSaltosChips"></div>
+          <div style="display:flex; gap:8px; margin-top:6px;">
+            <input id="addSaltosIn" list="citiesList" placeholder="digite uma cidade e Enter"/>
+            <button id="btnAddSalto">Adicionar salto</button>
+            <button id="btnAddCidade">Nova cidade</button>
+          </div>
+          <small style="color:#6b7280">Dica: cole “A > B > C” que eu quebro nos saltos.</small>
+        </div>
+      </div>
+      <div class="actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px;">
+        <button id="btnCancelAdd">Cancelar</button>
+        <button id="btnSaveAdd">Salvar</button>
+      </div>
+      <div id="addWarn" style="color:#b91c1c; font-size:12px; margin-top:6px;"></div>
+    </div>
+  </div>
+
+  <div class="modal" id="modalEdit">
+    <div class="card">
+      <h3 style="margin:0 0 8px 0;">Editar canal</h3>
+      <div class="row"><label>Cliente</label><input id="editCliente" disabled></div>
+      <div class="row"><label>ID do canal</label><input id="editId"></div>
+      <div class="row"><label>Tipo</label>
+        <select id="editTipo">
+          <option value="proprio">próprio</option>
+          <option value="cedido">cedido</option>
+          <option value="recebido">recebido</option>
+        </select>
+      </div>
+      <div class="row"><label>Capacidade</label>
+        <div class="pillset" id="editCaps">
+          <label><input type="radio" name="editCap" value="100G"><span>100G</span></label>
+          <label><input type="radio" name="editCap" value="200G"><span>200G</span></label>
+          <label><input type="radio" name="editCap" value="300G"><span>300G</span></label>
+          <label><input type="radio" name="editCap" value="400G"><span>400G</span></label>
+          <label><input type="radio" name="editCap" value="600G"><span>600G</span></label>
+          <label><input type="radio" name="editCap" value="800G"><span>800G</span></label>
+        </div>
+      </div>
+      <div class="row"><label>Parceiro</label><input id="editParc" placeholder="habilita quando cedido/recebido"></div>
+      <div class="row"><label>Saltos</label>
+        <div style="flex:1">
+          <div class="chips" id="editSaltosChips"></div>
+          <div style="display:flex; gap:8px; margin-top:6px;">
+            <input id="editSaltosIn" list="citiesList" placeholder="digite uma cidade e Enter"/>
+            <button id="btnEditAddSalto">Adicionar salto</button>
+            <button id="btnEditAddCidade">Nova cidade</button>
+          </div>
+        </div>
+      </div>
+      <div class="actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px;">
+        <button id="btnCancelEdit">Cancelar</button>
+        <button id="btnSaveEdit">Salvar alterações</button>
+      </div>
+      <div id="editWarn" style="color:#b91c1c; font-size:12px; margin-top:6px;"></div>
+    </div>
+  </div>
+
+  <div class="modal" id="modalCity">
+    <div class="card">
+      <h3 style="margin:0 0 8px 0;">Adicionar cidade</h3>
+      <div class="row"><label>Nome da cidade</label><input id="cityName" placeholder="ex.: Floriano-PI"></div>
+      <div class="row"><label>Latitude</label><input id="cityLat" placeholder="-6.7712"></div>
+      <div class="row"><label>Longitude</label><input id="cityLng" placeholder="-43.0229"></div>
+      <div class="actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px;">
+        <button id="btnCancelCity">Cancelar</button>
+        <button id="btnSaveCity">Salvar cidade</button>
+      </div>
+      <div id="cityWarn" style="color:#b91c1c; font-size:12px; margin-top:6px;"></div>
+    </div>
+  </div>
 
   <datalist id="citiesList"></datalist>
 
@@ -101,45 +196,99 @@
 
   <script>
   (function(){
-    /* ===================== CONFIG ===================== */
     const JSON_URL  = 'mapadwdm.json';
-    const SHIFT_GAP   = 12;          // afastamento entre rotas paralelas (px)
-    const OFFSET_MODE = 'constant';  // 'constant' = offset constante por rota
+    const SHIFT_GAP   = 12;
+    const OFFSET_MODE = 'constant';
 
-    /* ===================== VARIÁVEIS ===================== */
-    let DATA=null, CITY_COORDS=null, CITY_BOUNDS=null;
+    let DATA=null, CITY_COORDS=null;
     let map, BASE_LIGHT, BASE_DARK, currentBase, CANV;
     let CLIENT_LAYERS={}, HILAYER=null, SELAYER=null, ALL_LINES=[];
     let CLIENT_VISIBLE={};
 
     const $ = id => document.getElementById(id);
 
-    /* ============ CORES (iguais à versão anterior) ============ */
-    // ... (mantenho todas as helpers de cor exatamente como você recebeu no v11)
-    // Para economizar espaço, omiti aqui — mas no seu arquivo final essas funções permanecem idênticas:
-    // hexToRgb, hslToRgb, rgbToXyz, xyzToLab, rgbToLab, deltaE00, normalizeHex,
-    // registerUsedColor, getOrCreateClientColor, USED, MIN_DELTAE
-    // -------------- CÓDIGO DE CORES (COLE IGUAL AO DA SUA V11) --------------
+    /* ---------- cores bem separadas ---------- */
+    const USED=[]; const MIN_DELTAE=28;
+    function hexToRgb(hex){ const h=hex.replace('#','').trim(); const n=parseInt(h.length===3?h.split('').map(c=>c+c).join(''):h,16); return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}; }
+    function hslToRgb(h,s,l){ s/=100; l/=100; const C=(1-Math.abs(2*l-1))*s, hp=h/60, X=C*(1-Math.abs((hp%2)-1)); let r1=0,g1=0,b1=0;
+      if(0<=hp&&hp<1){r1=C;g1=X;} else if(1<=hp&&hp<2){r1=X;g1=C;} else if(2<=hp&&hp<3){g1=C;b1=X;} else if(3<=hp&&hp<4){g1=X;b1=C;}
+      else if(4<=hp&&hp<5){r1=X;b1=C;} else if(5<=hp&&hp<6){r1=C;b1=X;} const m=l-C/2; return {r:Math.round((r1+m)*255),g:Math.round((g1+m)*255),b:Math.round((b1+m)*255)}; }
+    function rgbToXyz(r,g,b){ const sr=[r,g,b].map(v=>{ v/=255; return (v<=0.04045)? v/12.92 : Math.pow((v+0.055)/1.055,2.4); });
+      return { x:(sr[0]*0.4124564+sr[1]*0.3575761+sr[2]*0.1804375)*100, y:(sr[0]*0.2126729+sr[1]*0.7151522+sr[2]*0.0721750)*100, z:(sr[0]*0.0193339+sr[1]*0.1191920+sr[2]*0.9503041)*100 }; }
+    function xyzToLab(x,y,z){ const xr=x/95.047, yr=y/100, zr=z/108.883, f=t=>(t>0.008856?Math.cbrt(t):(7.787*t+16/116)); const fx=f(xr), fy=f(yr), fz=f(zr); return {L:(116*fy)-16, a:500*(fx-fy), b:200*(fy-fz)}; }
+    function rgbToLab(r,g,b){ const xyz=rgbToXyz(r,g,b); return xyzToLab(xyz.x,xyz.y,xyz.z); }
+    function deltaE00(l1,l2){
+      const {L:L1,a:a1,b:b1}=l1,{L:L2,a:a2,b:b2}=l2;
+      const avgLp=(L1+L2)/2, C1=Math.hypot(a1,b1), C2=Math.hypot(a2,b2), avgC=(C1+C2)/2;
+      const G=0.5*(1-Math.sqrt(Math.pow(avgC,7)/(Math.pow(avgC,7)+Math.pow(25,7))));
+      const a1p=(1+G)*a1, a2p=(1+G)*a2, C1p=Math.hypot(a1p,b1), C2p=Math.hypot(a2p,b2), avgCp=(C1p+C2p)/2;
+      const h1p=(Math.atan2(b1,a1p)*180/Math.PI+360)%360, h2p=(Math.atan2(b2,a2p)*180/Math.PI+360)%360;
+      let deltahp; if(Math.abs(h1p-h2p)<=180) deltahp=h2p-h1p; else deltahp=(h2p<=h1p)?h2p-h1p+360:h2p-h1p-360;
+      const dHp=2*Math.sqrt(C1p*C2p)*Math.sin((deltahp/2)*Math.PI/180);
+      const dLp=L2-L1, dCp=C2p-C1p; let avgHp; if(Math.abs(h1p-h2p)<=180) avgHp=(h1p+h2p)/2; else avgHp=(h1p+h2p+360)/2;
+      const T=1-.17*Math.cos((avgHp-30)*Math.PI/180)+.24*Math.cos((2*avgHp)*Math.PI/180)+.32*Math.cos((3*avgHp+6)*Math.PI/180)-.2*Math.cos((4*avgHp-63)*Math.PI/180);
+      const Sl=1+(0.015*Math.pow(avgLp-50,2))/Math.sqrt(20+Math.pow(avgLp-50,2)), Sc=1+.045*avgCp, Sh=1+.015*avgCp*T;
+      const Rt=-2*Math.sqrt(Math.pow(avgCp,7)/(Math.pow(avgCp,7)+Math.pow(25,7)))*Math.sin((60*Math.exp(-Math.pow((avgHp-275)/25,2)))*Math.PI/180);
+      return Math.sqrt(Math.pow(dLp/Sl,2)+Math.pow(dCp/Sc,2)+Math.pow(dHp/Sh,2)+Rt*(dCp/Sc)*(dHp/Sh));
+    }
+    function normalizeHex(x){ x=String(x||'').trim(); return x? (x.startsWith('#')?x.toLowerCase():'#'+x.toLowerCase()):null; }
+    function registerUsedColor(hex){ const hx=normalizeHex(hex); if(!hx) return; const {r,g,b}=hexToRgb(hx); const lab=rgbToLab(r,g,b); if(!USED.some(u=>u.hex===hx)) USED.push({hex:hx,lab}); }
+    function getOrCreateClientColor(n){
+      n=(n||'').trim();
+      if(DATA?.clientes?.[n]?.color){ const hx=normalizeHex(DATA.clientes[n].color); registerUsedColor(hx); return hx; }
+      let hash=0; for(let i=0;i<n.length;i++) hash=(hash*31+n.charCodeAt(i))>>>0;
+      let baseHue = hash % 360; const GOLD=137.508, SATS=[72,64,80], LIGHTS=[50,58,42];
+      let best={hex:'#f0f', lab:null, score:-1};
+      for(let i=0;i<360;i++){
+        const h=(baseHue + i*GOLD)%360;
+        for(let sI=0;sI<SATS.length;sI++)
+          for(let lI=0;lI<LIGHTS.length;lI++){
+            const s=SATS[(sI+i)%SATS.length], l=LIGHTS[(lI+i)%LIGHTS.length];
+            const {r,g,b}=hslToRgb(h,s,l); const lab=rgbToLab(r,g,b);
+            let minD=Infinity; for(const u of USED){ const d=deltaE00(lab,u.lab); if(d<minD) minD=d; if(minD<MIN_DELTAE) break; }
+            const hex='#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+            if(minD>=MIN_DELTAE){ registerUsedColor(hex); return hex; }
+            if(minD>best.score) best={hex,lab,score:minD};
+          }
+      }
+      registerUsedColor(best.hex); return best.hex;
+    }
 
-    /* ============ PROXIMIDADE / ALT-CLICK ============ */
-    // ... (mesmo da v11)
-    function pointSegDist(p, a, b){ const abx=b.x-a.x, aby=b.y-a.y, apx=p.x-a.x, apy=p.y-a.y;
-      const ab2=abx*abx+aby*aby; let t=ab2? (apx*abx+apy*aby)/ab2 : 0; if(t<0) t=0; else if(t>1) t=1;
-      const x=a.x+abx*t, y=a.y+aby*t; return Math.hypot(p.x-x, p.y-y); }
+    /* ---------- proximidade ---------- */
+    function pointSegDist(p, a, b){
+      const abx=b.x-a.x, aby=b.y-a.y, apx=p.x-a.x, apy=p.y-a.y;
+      const ab2=abx*abx+aby*aby; let t=ab2? (apx*abx+apy*aby)/ab2 : 0;
+      if(t<0) t=0; else if(t>1) t=1;
+      const x=a.x+abx*t, y=a.y+aby*t;
+      return Math.hypot(p.x-x, p.y-y);
+    }
     function routeMinDistPx(rec, latlng){
-      const p=map.latLngToLayerPoint(latlng), ll=rec.line.getLatLngs(); let min=Infinity;
-      for(let i=0;i<ll.length-1;i++){ const a=map.latLngToLayerPoint(ll[i]), b=map.latLngToLayerPoint(ll[i+1]);
-        min=Math.min(min, pointSegDist(p,a,b)); } return min; }
+      const p=map.latLngToLayerPoint(latlng);
+      const ll=rec.line.getLatLngs();
+      let min=Infinity;
+      for(let i=0;i<ll.length-1;i++){
+        const a=map.latLngToLayerPoint(ll[i]);
+        const b=map.latLngToLayerPoint(ll[i+1]);
+        min=Math.min(min, pointSegDist(p,a,b));
+      }
+      return min;
+    }
     function showNearbyRoutes(latlng){
-      const cand=[]; for(const rec of ALL_LINES){ const d=routeMinDistPx(rec, latlng); if(d<=18) cand.push({rec,d}); }
-      if(!cand.length) return false; cand.sort((a,b)=>a.d-b.d);
+      const cand=[];
+      for(const rec of ALL_LINES){
+        const d=routeMinDistPx(rec, latlng);
+        if(d<=18) cand.push({rec,d});
+      }
+      if(!cand.length) return false;
+      cand.sort((a,b)=>a.d-b.d);
       const div=document.createElement('div');
-      div.innerHTML='<b>Canais próximos</b><br>'+cand.slice(0,10).map((c,i)=>`
-        <div style="margin:4px 0; display:flex; gap:6px; align-items:center">
-          <span style="width:10px;height:10px;border-radius:50%;background:${c.rec.line.options.color};display:inline-block"></span>
-          <button data-i="${i}">selecionar</button>
-          <span>${(c.rec.canalRef.id||'—').toUpperCase()} — ${c.rec.cliente}</span>
-        </div>`).join('');
+      div.innerHTML = '<b>Canais próximos</b><br>' +
+        cand.slice(0,10).map((c,i)=>`
+          <div style="margin:4px 0; display:flex; gap:6px; align-items:center">
+            <span style="width:10px;height:10px;border-radius:50%;background:${c.rec.line.options.color};display:inline-block"></span>
+            <button data-i="${i}">selecionar</button>
+            <span>${(c.rec.canalRef.id||'—').toUpperCase()} — ${c.rec.cliente}</span>
+          </div>`).join('');
       const pop=L.popup().setLatLng(latlng).setContent(div).openOn(map);
       div.querySelectorAll('button').forEach(b=>{
         b.onclick=()=>{ const c=cand[+b.dataset.i].rec; selectRoute(c,true); pop.remove(); };
@@ -147,11 +296,11 @@
       return true;
     }
 
-    /* ===================== MAPA (Canvas + anti-wrap) ===================== */
+    /* ---------- mapa (Canvas!) ---------- */
     function initMap(){
       map = L.map('map',{
-        zoomControl:false, zoomSnap:0.25, zoomDelta:0.5, minZoom:3, maxZoom:20,
-        preferCanvas:true, worldCopyJump:false, inertia:true
+        zoomControl:false, zoomSnap:0.25, zoomDelta:0.5, minZoom:4, maxZoom:18,
+        preferCanvas:true
       }).setView([-5.5,-41.5],6);
 
       CANV = L.canvas({padding:0.5});
@@ -177,7 +326,7 @@
       });
     }
 
-    /* ===================== HELPERS ===================== */
+    /* ---------- utils ---------- */
     const rnd = v => Number(v).toFixed(5);
     const segKey = (a,b)=>{ const k1=rnd(a.lat)+','+rnd(a.lng), k2=rnd(b.lat)+','+rnd(b.lng); return (k1<k2)?(k1+'|'+k2):(k2+'|'+k1); };
     function getCoord(city){ const v=CITY_COORDS?.[city]; if(!v) return null; return Array.isArray(v)?{lat:+v[0],lng:+v[1]}:{lat:+v.lat,lng:+v.lng}; }
@@ -238,7 +387,7 @@
       return offs;
     }
 
-    /* ===================== DESTAQUE / SELEÇÃO ===================== */
+    /* ---------- destaque/seleção ---------- */
     function clearSelect(){ if(SELAYER){ SELAYER.remove(); SELAYER=null; } }
     function selectRoute(rec, center=false){
       clearSelect();
@@ -252,7 +401,7 @@
       if(center){ map.fitBounds(L.latLngBounds(path).pad(0.08)); }
     }
 
-    /* ===================== RENDER ===================== */
+    /* ---------- render ---------- */
     function render(){
       if(!DATA?.clientes) return;
       Object.values(CLIENT_LAYERS).forEach(g=>g.remove()); CLIENT_LAYERS={};
@@ -365,13 +514,10 @@
         });
       });
 
-      // ==> Enquadramento protegido por CITY_BOUNDS
-      const b = bounds.length ? L.latLngBounds(bounds).pad(0.08) : CITY_BOUNDS;
-      if (b) map.fitBounds(clampBoundsToCity(b));
+      if(bounds.length) map.fitBounds(L.latLngBounds(bounds).pad(0.08));
     }
 
-    /* ===================== BUSCA / HIGHLIGHT ===================== */
-    function clearSelect(){ if(SELAYER){ SELAYER.remove(); SELAYER=null; } }
+    /* ---------- busca/destaque ---------- */
     function clearHighlight(){
       if(HILAYER){HILAYER.remove();HILAYER=null;}
       ALL_LINES.forEach(({line,hit})=>{ line.setStyle({opacity:0.98}); hit.setStyle({opacity:0.001}); });
@@ -388,7 +534,7 @@
       });
     }
 
-    /* ===================== LOAD / EXPORT / CENTER ===================== */
+    /* ---------- load/export/center (com patches) ---------- */
     function normalizeJSON(json){
       const raw=json.CITY_COORDS||json.CITY||{}; const city={};
       Object.keys(raw).forEach(k=>{ const v=raw[k]; city[k]=Array.isArray(v)?{lat:+v[0],lng:+v[1]}:{lat:+v.lat,lng:+v.lng}; });
@@ -403,16 +549,6 @@
         return window.JSON5.parse(txt);
       }
     }
-    function computeCityBounds(){
-      const pts = Object.values(CITY_COORDS||{}).map(v=> Array.isArray(v)? L.latLng(+v[0],+v[1]) : L.latLng(+v.lat,+v.lng) );
-      return pts.length ? L.latLngBounds(pts).pad(0.25) : null;
-    }
-    function clampBoundsToCity(b){
-      if(!CITY_BOUNDS) return b;
-      // se o centro do bounds não está perto do conjunto de cidades, volta para CITY_BOUNDS
-      const c=b.getCenter(), ok = CITY_BOUNDS.pad(0.6).contains(c);
-      return ok ? b : CITY_BOUNDS;
-    }
     async function loadFromURL(){
       if (location.protocol==='file:'){
         alert('Abra o JSON pelo botão "Carregar JSON" (o navegador bloqueia fetch em file://).');
@@ -422,8 +558,6 @@
       const j=await parseMaybe(txt); const n=normalizeJSON(j);
       CITY_COORDS=n.city; DATA={clientes:n.clientes};
       Object.values(DATA.clientes||{}).forEach(c=>{ if(c?.color) registerUsedColor(c.color); });
-      CITY_BOUNDS = computeCityBounds();
-      if (CITY_BOUNDS) map.setMaxBounds(CITY_BOUNDS.pad(1.2)); // evita pular para outra cópia do mundo
       buildCityDatalist(); render();
     }
     function loadFromFile(file){
@@ -433,8 +567,6 @@
           const j=await parseMaybe(e.target.result); const n=normalizeJSON(j);
           CITY_COORDS=n.city; DATA={clientes:n.clientes};
           Object.values(DATA.clientes||{}).forEach(c=>{ if(c?.color) registerUsedColor(c.color); });
-          CITY_BOUNDS = computeCityBounds();
-          if (CITY_BOUNDS) map.setMaxBounds(CITY_BOUNDS.pad(1.2));
           buildCityDatalist(); render();
         }catch(err){ alert('JSON inválido (remova vírgulas finais/comentários).'); }
       };
@@ -445,15 +577,16 @@
       Object.keys(CITY_COORDS||{}).sort().forEach(k=>{ const o=document.createElement('option'); o.value=k; dl.appendChild(o); });
     }
 
+    // PATCH 1: bounds pelas coordenadas cruas
     function getRoutesBounds(){
-      if(!ALL_LINES.length) return CITY_BOUNDS;
+      if(!ALL_LINES.length) return null;
       let b=null;
       for(const rec of ALL_LINES){
         if(!rec.pts || rec.pts.length===0) continue;
         const lb=L.latLngBounds(rec.pts);
         b = b ? b.extend(lb) : L.latLngBounds(lb);
       }
-      return b ? clampBoundsToCity(b) : CITY_BOUNDS;
+      return b;
     }
     function fitBoundsAsync(bounds,pad=0.06){
       if(!bounds) return Promise.resolve();
@@ -468,6 +601,7 @@
         map.once('moveend', fin); setTimeout(fin, 450); map.setView(center, zoom);
       });
     }
+    // PATCH 2: esperar tiles
     function waitTilesLoaded(timeoutMs = 1200){
       return new Promise(resolve=>{
         const layer = currentBase;
@@ -479,6 +613,7 @@
         setTimeout(fin, timeoutMs);
       });
     }
+    // PATCH 3: usar bounds crus + esperar tiles
     async function withFittedRoutesView(cb){
       const bounds=getRoutesBounds();
       const prev={center:map.getCenter(), zoom:map.getZoom()};
@@ -537,7 +672,7 @@
       }catch(e){ hideUI(false); alert('Falha ao exportar PDF: '+e.message); }
     }
 
-    /* ===================== UI (igual v11) ===================== */
+    /* ---------- UI ---------- */
     function initUI(){
       $('btnFetch').onclick = ()=> loadFromURL().catch(err=> alert('Erro carregando JSON: '+err.message));
       $('fileJSON').onchange = e=>{ if(e.target.files?.[0]) loadFromFile(e.target.files[0]); };
@@ -561,11 +696,82 @@
         a.href=URL.createObjectURL(blob); a.download='mapadwdm_atualizado.json'; a.click(); URL.revokeObjectURL(a.href); };
       $('btnCenterMap').onclick=()=>{ const b=getRoutesBounds(); if(b) map.fitBounds(b.pad(0.08)); };
 
-      // (os handlers de adicionar/editar/nova cidade continuam iguais à v11)
-      // ...
+      $('btnAdd').onclick=openAddModal; $('btnCancelAdd').onclick=closeAddModal; $('btnSaveAdd').onclick=saveAdd;
+      $('addId').oninput=e=> e.target.value=e.target.value.toUpperCase();
+      $('addTipo').onchange=e=>{ const own=e.target.value==='proprio'; $('addParc').disabled=own; if(own) $('addParc').value=''; };
+      $('btnAddSalto').onclick=()=>{ const v=$('addSaltosIn').value.trim(); if(!v) return; addChip($('addSaltosChips'), v); $('addSaltosIn').value=''; };
+      $('addSaltosIn').onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); $('btnAddSalto').click(); } };
+      $('btnAddCidade').onclick=()=> openCityModal(name=> $('addSaltosIn').value=name);
+
+      $('btnCancelEdit').onclick=closeEditModal; $('btnSaveEdit').onclick=saveEdit;
+      $('editId').oninput=e=> e.target.value=e.target.value.toUpperCase();
+      $('editTipo').onchange=e=>{ const own=e.target.value==='proprio'; $('editParc').disabled=own; if(own) $('editParc').value=''; };
+      $('btnEditAddSalto').onclick=()=>{ const v=$('editSaltosIn').value.trim(); if(!v) return; addChip($('editSaltosChips'), v); $('editSaltosIn').value=''; };
+      $('editSaltosIn').onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); $('btnEditAddSalto').click(); } };
+      $('btnEditAddCidade').onclick=()=> openCityModal(name=> $('editSaltosIn').value=name);
     }
 
-    /* ===================== BOOT ===================== */
+    /* helpers chips / modais */
+    function addChip(ct,val){ const d=document.createElement('span'); d.className='chip'; d.dataset.city=val;
+      const b=document.createElement('button'); b.textContent='×'; b.onclick=()=>d.remove(); d.append(val,b); ct.appendChild(d); }
+    function getChips(ct){ return Array.from(ct.querySelectorAll('.chip')).map(x=>x.dataset.city); }
+    function chipsFromText(t){ return t.split(/>|→|->|—|,|;|\n/).map(s=>s.trim()).filter(Boolean); }
+    function openCityModal(onSave){
+      $('cityName').value=''; $('cityLat').value=''; $('cityLng').value=''; $('cityWarn').textContent='';
+      $('modalCity').style.display='flex';
+      $('btnCancelCity').onclick=()=> $('modalCity').style.display='none';
+      $('btnSaveCity').onclick=()=>{
+        const name=$('cityName').value.trim(); const lat=parseFloat($('cityLat').value.trim()); const lng=parseFloat($('cityLng').value.trim());
+        if(!name||isNaN(lat)||isNaN(lng)){ $('cityWarn').textContent='Preencha nome, latitude e longitude válidos.'; return; }
+        if(!CITY_COORDS) CITY_COORDS={}; CITY_COORDS[name]={lat,lng}; buildCityDatalist();
+        $('modalCity').style.display='none'; if(onSave) onSave(name);
+      };
+    }
+    function openAddModal(){
+      $('addCliente').value=''; $('addId').value=''; $('addTipo').value='proprio';
+      document.querySelectorAll('#addCaps input[type="radio"]').forEach((r,i)=> r.checked=(i===0));
+      $('addParc').value=''; $('addParc').disabled=true; $('addSaltosChips').innerHTML=''; $('addSaltosIn').value=''; $('addWarn').textContent='';
+      $('modalAdd').style.display='flex';
+    }
+    function closeAddModal(){ $('modalAdd').style.display='none'; }
+    function saveAdd(){
+      const cliente=$('addCliente').value.trim(); const id=$('addId').value.trim().toUpperCase(); const tipo=$('addTipo').value;
+      const cap=(document.querySelector('#addCaps input:checked')||{}).value||''; const parc=$('addParc').value.trim();
+      let saltos=getChips($('addSaltosChips')); if(!saltos.length) saltos=chipsFromText($('addSaltosIn').value);
+      if(!cliente||!id||!saltos.length){ $('addWarn').textContent='Preencha Cliente, ID e Saltos.'; return; }
+      const unknown=saltos.filter(c=>!getCoord(c)); if(unknown.length){ $('addWarn').textContent='Cidade(s) não encontrada(s): '+unknown.join(', '); return; }
+      if(!DATA) DATA={clientes:{}}; if(!DATA.clientes) DATA.clientes={};
+      if(!DATA.clientes[cliente]){
+        const color = getOrCreateClientColor(cliente);
+        DATA.clientes[cliente] = { color, canais: [] };
+      } else {
+        if (DATA.clientes[cliente].color) registerUsedColor(DATA.clientes[cliente].color);
+      }
+      DATA.clientes[cliente].canais.push({id,tipo,capacidade:cap,parceiro:parc,saltos});
+      closeAddModal(); render(); $('txtSearch').value=id; highlight(id);
+    }
+    function openEditModal(cliente,idx){
+      const canal=(DATA.clientes[cliente].canais||[])[idx]; if(!canal) return;
+      $('editCliente').value=cliente; $('editId').value=(canal.id||'').toUpperCase(); $('editTipo').value=(canal.tipo||'proprio');
+      document.querySelectorAll('#editCaps input[type="radio"]').forEach(r=> r.checked=(r.value===(canal.capacidade||'100G')));
+      $('editParc').value=canal.parceiro||''; $('editParc').disabled=( $('editTipo').value==='proprio' );
+      $('editSaltosChips').innerHTML=''; (canal.saltos||[]).forEach(s=> addChip($('editSaltosChips'), s));
+      $('editSaltosIn').value=''; $('editWarn').textContent=''; $('modalEdit').style.display='flex';
+      window.__lastEdit={cliente,idx};
+    }
+    function closeEditModal(){ $('modalEdit').style.display='none'; }
+    function saveEdit(){
+      const cliente=$('editCliente').value; const id=$('editId').value.trim().toUpperCase(); const tipo=$('editTipo').value;
+      const cap=(document.querySelector('#editCaps input:checked')||{}).value||''; const parc=$('editParc').value.trim();
+      const saltos=getChips($('editSaltosChips'));
+      if(!cliente||!id||!saltos.length){ $('editWarn').textContent='Preencha ID e Saltos.'; return; }
+      const unknown=saltos.filter(c=>!getCoord(c)); if(unknown.length){ $('editWarn').textContent='Cidade(s) não encontrada(s): '+unknown.join(', '); return; }
+      const i=(window.__lastEdit&&window.__lastEdit.cliente===cliente)?window.__lastEdit.idx:-1;
+      if(i>=0 && DATA.clientes[cliente].canais[i]) DATA.clientes[cliente].canais[i]={id,tipo,capacidade:cap,parceiro:parc,saltos};
+      closeEditModal(); render(); $('txtSearch').value=id; highlight(id);
+    }
+
+    /* ---------- boot ---------- */
     initMap();
     initUI();
     loadFromURL().catch(()=>{});
