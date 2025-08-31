@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Mapa DWDM — v12 (export & JSON fix)</title>
+<title>Mapa DWDM — v11-fix (parser tolerante)</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<!-- JSON5 para aceitar vírgulas finais, comentários etc. -->
+<!-- JSON5 para aceitar vírgulas finais, comentários, aspas simples etc. -->
 <script src="https://cdn.jsdelivr.net/npm/json5@2.2.3/dist/index.min.js"></script>
 
 <style>
@@ -94,7 +94,7 @@
   </div>
   <div class="credit">Afastamento automático nas rotas sobrepostas • Controles de zoom no canto inferior direito</div>
 
-  <!-- Modais (Adicionar / Editar / Nova cidade) -->
+  <!-- Modais (Adicionar / Editar / Nova cidade) – mesmo conteúdo das versões anteriores -->
   <div class="modal" id="modalAdd">
     <div class="card">
       <h3 style="margin:0 0 8px 0;">Adicionar canal</h3>
@@ -292,24 +292,17 @@
     /* =================== MAPA =================== */
     function initMap(){
       map = L.map('map',{
-        zoomControl:false,
-        zoomSnap:0.25,
-        zoomDelta:0.5,
-        minZoom:3,
-        maxZoom:20,
-        preferCanvas:true,
-        worldCopyJump:false,
-        inertia:true
+        zoomControl:false, zoomSnap:0.25, zoomDelta:0.5, minZoom:3, maxZoom:20,
+        preferCanvas:true, worldCopyJump:false, inertia:true
       }).setView([-5.5,-41.5],6);
 
       CANV = L.canvas({padding:0.5});
-      L.control.zoom({position:'bottomright'}).addTo(map);
 
-      // noWrap => impede repetição do mundo (corrige export “fora do Brasil”)
+      L.control.zoom({position:'bottomright'}).addTo(map);
       BASE_LIGHT = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        {attribution:'&copy; OpenStreetMap', crossOrigin:'anonymous', noWrap:true, continuousWorld:false});
+        {attribution:'&copy; OpenStreetMap', crossOrigin:'anonymous'});
       BASE_DARK  = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        {attribution:'&copy; Carto, OpenStreetMap', crossOrigin:'anonymous', noWrap:true, continuousWorld:false});
+        {attribution:'&copy; Carto, OpenStreetMap', crossOrigin:'anonymous'});
       currentBase = BASE_LIGHT.addTo(map);
 
       const recalc=()=>{
@@ -535,7 +528,7 @@
       });
     }
 
-    /* =================== PARSER TOLERANTE (JSON5 + limpeza) =================== */
+    /* =================== PARSER TOLERANTE (NOVO) =================== */
     function sanitizeJsonText(txt){
       txt = txt.replace(/^\uFEFF/, '');              // BOM
       txt = txt.replace(/\/\*[\s\S]*?\*\//g, '')     // /* ... */
@@ -623,26 +616,22 @@
         const lb=L.latLngBounds(rec.pts);
         b = b ? b.extend(lb) : L.latLngBounds(lb);
       }
-      return b || CITY_BOUNDS;
+      return b ? clampBoundsToCity(b) : CITY_BOUNDS;
     }
     function fitBoundsAsync(bounds,pad=0.06){
       if(!bounds) return Promise.resolve();
       return new Promise(res=>{
         let done=false; const fin=()=>{ if(!done){done=true;res();} };
-        map.once('moveend', fin);
-        setTimeout(fin, 600);
-        map.fitBounds(bounds.pad(pad));
+        map.once('moveend', fin); setTimeout(fin, 450); map.fitBounds(bounds.pad(pad));
       });
     }
     function setViewAsync(center,zoom){
       return new Promise(res=>{
         let done=false; const fin=()=>{ if(!done){done=true;res();} };
-        map.once('moveend', fin);
-        setTimeout(fin, 600);
-        map.setView(center, zoom);
+        map.once('moveend', fin); setTimeout(fin, 450); map.setView(center, zoom);
       });
     }
-    function waitTilesLoaded(timeoutMs = 2000){
+    function waitTilesLoaded(timeoutMs = 1200){
       return new Promise(resolve=>{
         const layer = currentBase;
         if (!layer || !layer._map){ resolve(); return; }
@@ -655,24 +644,18 @@
     }
     async function withFittedRoutesView(cb){
       const bounds=getRoutesBounds();
-      const prev={center:map.getCenter(), zoom:map.getZoom(), maxBounds:map.options.maxBounds||null};
-
-      map.setMaxBounds(null); // solta restrição para evitar snap
-
+      const prev={center:map.getCenter(), zoom:map.getZoom()};
       if(bounds){
-        await fitBoundsAsync(bounds, 0.08);
-        map.invalidateSize(true);
-        await waitTilesLoaded(2200);
-        await new Promise(r=>setTimeout(r,160));
-      }
-
-      try{
-        return await cb();
-      }finally{
-        await setViewAsync(prev.center, prev.zoom);
-        map.setMaxBounds(prev.maxBounds || (CITY_BOUNDS ? CITY_BOUNDS.pad(1.2) : null));
-        map.invalidateSize(true);
+        await fitBoundsAsync(bounds, 0.06);
+        await waitTilesLoaded();
         await new Promise(r=>setTimeout(r,120));
+      }
+      try{ return await cb(); }
+      finally{
+        if(bounds){
+          await setViewAsync(prev.center, prev.zoom);
+          await new Promise(r=>setTimeout(r,80));
+        }
       }
     }
     function hideUI(hide){
@@ -683,14 +666,14 @@
     async function exportPNG(){
       try{
         hideUI(true);
-        const dataUrl = await withFittedRoutesView(() =>
-          new Promise((resolve, reject)=>{
+        const dataUrl = await withFittedRoutesView(async ()=>{
+          return await new Promise((resolve, reject)=>{
             window.leafletImage(map, (err, canvas)=>{
               if(err) return reject(err);
               resolve(canvas.toDataURL('image/png'));
             });
-          })
-        );
+          });
+        });
         hideUI(false);
         const a=document.createElement('a'); a.href=dataUrl; a.download='mapadwdm.png'; a.click();
       }catch(e){ hideUI(false); alert('Falha ao exportar PNG: '+e.message); }
@@ -698,29 +681,25 @@
     async function exportPDF(){
       try{
         hideUI(true);
-        const dataUrl = await withFittedRoutesView(() =>
-          new Promise((resolve, reject)=>{
+        const dataUrl = await withFittedRoutesView(async ()=>{
+          return await new Promise((resolve, reject)=>{
             window.leafletImage(map, (err, canvas)=>{
               if(err) return reject(err);
               resolve(canvas.toDataURL('image/jpeg', 0.92));
             });
-          })
-        );
+          });
+        });
         hideUI(false);
-
         const {jsPDF}=window.jspdf;
         const pdf=new jsPDF({orientation:'landscape',unit:'pt',format:'a3',compress:true});
         const W=pdf.internal.pageSize.getWidth(), H=pdf.internal.pageSize.getHeight(), M=24;
         const img=new Image(); await new Promise(r=>{ img.onload=r; img.src=dataUrl; });
         const w=W-2*M, h=w*img.height/img.width, x=M, y=(H-h)/2;
-        pdf.addImage(dataUrl,'JPEG',x,y,w,h);
-        pdf.save('mapadwdm.pdf');
+        pdf.addImage(dataUrl,'JPEG',x,y,w,h); pdf.save('mapadwdm.pdf');
       }catch(e){ hideUI(false); alert('Falha ao exportar PDF: '+e.message); }
     }
 
-    /* =================== UI / MODAIS =================== */
-    let openAddModal, closeAddModal, saveAdd, openEditModal, closeEditModal, saveEdit, openCityModal;
-
+    /* =================== UI =================== */
     function initUI(){
       $('btnFetch').onclick = ()=> loadFromURL();
       $('fileJSON').onchange = e=>{ if(e.target.files?.[0]) loadFromFile(e.target.files[0]); };
@@ -744,12 +723,13 @@
         a.href=URL.createObjectURL(blob); a.download='mapadwdm_atualizado.json'; a.click(); URL.revokeObjectURL(a.href); };
       $('btnCenterMap').onclick=()=>{ const b=getRoutesBounds(); if(b) map.fitBounds(b.pad(0.08)); };
 
+      // atalhos dos modais (mesmo comportamento que você já tinha)
       const addChip=(ct,val)=>{ const d=document.createElement('span'); d.className='chip'; d.dataset.city=val;
         const b=document.createElement('button'); b.textContent='×'; b.onclick=()=>d.remove(); d.append(val,b); ct.appendChild(d); };
       const getChips=ct=> Array.from(ct.querySelectorAll('.chip')).map(x=>x.dataset.city);
       const chipsFromText=t=> t.split(/>|→|->|—|,|;|\n/).map(s=>s.trim()).filter(Boolean);
 
-      openCityModal = function(onSave){
+      function openCityModal(onSave){
         $('cityName').value=''; $('cityLat').value=''; $('cityLng').value=''; $('cityWarn').textContent='';
         $('modalCity').style.display='flex';
         $('btnCancelCity').onclick=()=> $('modalCity').style.display='none';
@@ -759,16 +739,16 @@
           if(!CITY_COORDS) CITY_COORDS={}; CITY_COORDS[name]={lat,lng}; buildCityDatalist();
           $('modalCity').style.display='none'; if(onSave) onSave(name);
         };
-      };
+      }
 
-      openAddModal = function(){
+      function openAddModal(){
         $('addCliente').value=''; $('addId').value=''; $('addTipo').value='proprio';
         document.querySelectorAll('#addCaps input[type="radio"]').forEach((r,i)=> r.checked=(i===0));
         $('addParc').value=''; $('addParc').disabled=true; $('addSaltosChips').innerHTML=''; $('addSaltosIn').value=''; $('addWarn').textContent='';
         $('modalAdd').style.display='flex';
-      };
-      closeAddModal = function(){ $('modalAdd').style.display='none'; };
-      saveAdd = function(){
+      }
+      function closeAddModal(){ $('modalAdd').style.display='none'; }
+      function saveAdd(){
         const cliente=$('addCliente').value.trim(); const id=$('addId').value.trim().toUpperCase(); const tipo=$('addTipo').value;
         const cap=(document.querySelector('#addCaps input:checked')||{}).value||''; const parc=$('addParc').value.trim();
         let saltos=getChips($('addSaltosChips')); if(!saltos.length) saltos=chipsFromText($('addSaltosIn').value);
@@ -783,9 +763,9 @@
         }
         DATA.clientes[cliente].canais.push({id,tipo,capacidade:cap,parceiro:parc,saltos});
         closeAddModal(); render(); $('txtSearch').value=id; highlight(id);
-      };
+      }
 
-      openEditModal = function(cliente,idx){
+      function openEditModal(cliente,idx){
         const canal=(DATA.clientes[cliente].canais||[])[idx]; if(!canal) return;
         $('editCliente').value=cliente; $('editId').value=(canal.id||'').toUpperCase(); $('editTipo').value=(canal.tipo||'proprio');
         document.querySelectorAll('#editCaps input[type="radio"]').forEach(r=> r.checked=(r.value===(canal.capacidade||'100G')));
@@ -793,9 +773,9 @@
         $('editSaltosChips').innerHTML=''; (canal.saltos||[]).forEach(s=> addChip($('editSaltosChips'), s));
         $('editSaltosIn').value=''; $('editWarn').textContent=''; $('modalEdit').style.display='flex';
         window.__lastEdit={cliente,idx};
-      };
-      closeEditModal = function(){ $('modalEdit').style.display='none'; };
-      saveEdit = function(){
+      }
+      function closeEditModal(){ $('modalEdit').style.display='none'; }
+      function saveEdit(){
         const cliente=$('editCliente').value; const id=$('editId').value.trim().toUpperCase(); const tipo=$('editTipo').value;
         const cap=(document.querySelector('#editCaps input:checked')||{}).value||''; const parc=$('editParc').value.trim();
         const saltos=Array.from(document.querySelectorAll('#editSaltosChips .chip')).map(x=>x.dataset.city);
@@ -804,7 +784,7 @@
         const i=(window.__lastEdit&&window.__lastEdit.cliente===cliente)?window.__lastEdit.idx:-1;
         if(i>=0 && DATA.clientes[cliente].canais[i]) DATA.clientes[cliente].canais[i]={id,tipo,capacidade:cap,parceiro:parc,saltos};
         closeEditModal(); render(); $('txtSearch').value=id; highlight(id);
-      };
+      }
 
       $('btnAdd').onclick=openAddModal; $('btnCancelAdd').onclick=closeAddModal; $('btnSaveAdd').onclick=saveAdd;
       $('addId').oninput=e=> e.target.value=e.target.value.toUpperCase();
