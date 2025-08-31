@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Mapa DWDM — v8 (export viewport fix)</title>
+<title>Mapa DWDM — v9 (export via leaflet-image)</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
   :root{ --bg:#f6f7fb; --fg:#111; --muted:#374151; --card:#fff; --bd:#e5e7eb; }
@@ -91,7 +91,7 @@
   </div>
   <div class="credit">Afastamento automático nas rotas sobrepostas • Controles de zoom no canto inferior direito</div>
 
-  <!-- Modal Adicionar -->
+  <!-- Modais (Adicionar / Editar / Cidade) — idênticos às versões anteriores -->
   <div class="modal" id="modalAdd">
     <div class="card">
       <h3 style="margin:0 0 8px 0;">Adicionar canal</h3>
@@ -134,7 +134,6 @@
     </div>
   </div>
 
-  <!-- Modal Editar -->
   <div class="modal" id="modalEdit">
     <div class="card">
       <h3 style="margin:0 0 8px 0;">Editar canal</h3>
@@ -176,7 +175,6 @@
     </div>
   </div>
 
-  <!-- Modal Cidade -->
   <div class="modal" id="modalCity">
     <div class="card">
       <h3 style="margin:0 0 8px 0;">Adicionar cidade</h3>
@@ -194,20 +192,20 @@
   <datalist id="citiesList"></datalist>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet-simple-map-screenshoter/dist/leaflet-simple-map-screenshoter.js"></script>
+  <!-- NOVO: export confiável -->
+  <script src="https://unpkg.com/leaflet-image/leaflet-image.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
   <script>
   (function(){
     /* ===================== CONFIG ===================== */
-    const JSON_URL  = 'mapadwdm.json';  // onde buscar seu JSON
-    const SHIFT_GAP   = 12;             // afastamento (px) entre rotas sobrepostas
-    const OFFSET_MODE = 'constant';     // 'constant' (mais estável) ou 'local'
-    const PLACEHOLDER_1PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
+    const JSON_URL  = 'mapadwdm.json';
+    const SHIFT_GAP   = 12;
+    const OFFSET_MODE = 'constant';
 
     /* ===================== ESTADO ===================== */
     let DATA=null, CITY_COORDS=null;
-    let map, BASE_LIGHT, BASE_DARK, currentBase, screenshoter;
+    let map, BASE_LIGHT, BASE_DARK, currentBase;
     let CLIENT_LAYERS={}, HILAYER=null, SELAYER=null, ALL_LINES=[];
     let CLIENT_VISIBLE={};
 
@@ -306,19 +304,16 @@
     function initMap(){
       map = L.map('map',{zoomControl:false,zoomSnap:0.25,zoomDelta:0.5,minZoom:4,maxZoom:18}).setView([-5.5,-41.5],6);
       L.control.zoom({position:'bottomright'}).addTo(map);
-      BASE_LIGHT = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap', crossOrigin:true});
-      BASE_DARK  = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'&copy; Carto, OpenStreetMap', crossOrigin:true});
+      BASE_LIGHT = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        {attribution:'&copy; OpenStreetMap', crossOrigin:'anonymous'});
+      BASE_DARK  = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        {attribution:'&copy; Carto, OpenStreetMap', crossOrigin:'anonymous'});
       currentBase = BASE_LIGHT.addTo(map);
 
       map.createPane('routes');    map.getPane('routes').style.zIndex = 420;
       map.createPane('routesHit'); map.getPane('routesHit').style.zIndex = 455;
       map.createPane('routesHi');  map.getPane('routesHi').style.zIndex = 470;
       map.createPane('nodes');     map.getPane('nodes').style.zIndex = 460;
-
-      screenshoter = L.simpleMapScreenshoter({
-        position:'topleft', screenName:'mapa_dwdm', hidden:true,
-        domtoimageOptions:{bgcolor:'#ffffff',quality:1,useCORS:true,imagePlaceholder:PLACEHOLDER_1PX}
-      }).addTo(map);
 
       const recalc=()=>{
         Object.values(CLIENT_LAYERS).forEach(g=>g.getLayers().forEach(l=>{ if(l.__recalc) l.__recalc(); }));
@@ -585,7 +580,7 @@
       Object.keys(CITY_COORDS||{}).sort().forEach(k=>{ const o=document.createElement('option'); o.value=k; dl.appendChild(o); });
     }
 
-    /* ===================== EXPORT / CENTER (Viewport) ===================== */
+    /* ===================== EXPORT (leaflet-image) + CENTER ===================== */
     function getRoutesBounds(){ if(!ALL_LINES.length) return null; let b=null; for(const rec of ALL_LINES){ const lb=rec.line.getBounds(); b = b? b.extend(lb): L.latLngBounds(lb); } return b; }
     function fitBoundsAsync(bounds,pad=0.06){
       if(!bounds) return Promise.resolve();
@@ -614,43 +609,41 @@
       ['toolbar','legendClients'].forEach(id=>{ const el=$(id); if(el && el.style) el.style.visibility = hide?'hidden':'visible'; });
       document.querySelectorAll('.legend,.credit').forEach(el=> el.style.visibility = hide?'hidden':'visible');
     }
-    async function captureViewportBlob(){
-      const blob = await screenshoter.takeScreen('blob');  // captura o viewport atual
-      return blob;
-    }
-    async function blobToDataURL(blob){ return await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(blob); }); }
-    async function scaleDataURL(dataUrl, maxW, maxH, mime='image/png', quality=0.92){
-      const img=new Image(); img.crossOrigin='anonymous';
-      await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; img.src=dataUrl; });
-      const w=img.width, h=img.height;
-      const scale=Math.min(1, maxW/w, maxH/h);
-      const W=Math.round(w*scale), H=Math.round(h*scale);
-      const can=document.createElement('canvas'); can.width=W; can.height=H;
-      const ctx=can.getContext('2d'); ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
-      ctx.drawImage(img,0,0,W,H);
-      return can.toDataURL(mime,quality);
-    }
+
     async function exportPNG(){
       try{
         hideUI(true);
-        const blob = await withFittedRoutesView(async ()=> await captureViewportBlob());
+        const dataUrl = await withFittedRoutesView(async ()=>{
+          return await new Promise((resolve, reject)=>{
+            window.leafletImage(map, (err, canvas)=>{
+              if(err) return reject(err);
+              resolve(canvas.toDataURL('image/png'));
+            });
+          });
+        });
         hideUI(false);
-        const dataUrl = await scaleDataURL(await blobToDataURL(blob), 3000, 2000, 'image/png');
         const a=document.createElement('a'); a.href=dataUrl; a.download='mapadwdm.png'; a.click();
       }catch(e){ hideUI(false); alert('Falha ao exportar PNG: '+e.message); }
     }
+
     async function exportPDF(){
       try{
         hideUI(true);
-        const blob = await withFittedRoutesView(async ()=> await captureViewportBlob());
+        const dataUrl = await withFittedRoutesView(async ()=>{
+          return await new Promise((resolve, reject)=>{
+            window.leafletImage(map, (err, canvas)=>{
+              if(err) return reject(err);
+              resolve(canvas.toDataURL('image/jpeg', 0.92));
+            });
+          });
+        });
         hideUI(false);
-        const jpegUrl = await scaleDataURL(await blobToDataURL(blob), 3000, 2000, 'image/jpeg', 0.92);
         const {jsPDF}=window.jspdf;
         const pdf=new jsPDF({orientation:'landscape',unit:'pt',format:'a3',compress:true});
         const W=pdf.internal.pageSize.getWidth(), H=pdf.internal.pageSize.getHeight(), M=24;
-        const img=new Image(); await new Promise(r=>{ img.onload=r; img.src=jpegUrl; });
+        const img=new Image(); await new Promise(r=>{ img.onload=r; img.src=dataUrl; });
         const w=W-2*M, h=w*img.height/img.width, x=M, y=(H-h)/2;
-        pdf.addImage(jpegUrl,'JPEG',x,y,w,h); pdf.save('mapadwdm.pdf');
+        pdf.addImage(dataUrl,'JPEG',x,y,w,h); pdf.save('mapadwdm.pdf');
       }catch(e){ hideUI(false); alert('Falha ao exportar PDF: '+e.message); }
     }
 
@@ -724,7 +717,7 @@
       const unknown=saltos.filter(c=>!getCoord(c)); if(unknown.length){ $('addWarn').textContent='Cidade(s) não encontrada(s): '+unknown.join(', '); return; }
       if(!DATA) DATA={clientes:{}}; if(!DATA.clientes) DATA.clientes={};
       if(!DATA.clientes[cliente]){
-        const color = getOrCreateClientColor(cliente);   // nova cor segura para novo cliente
+        const color = getOrCreateClientColor(cliente);
         DATA.clientes[cliente] = { color, canais: [] };
       } else {
         if (DATA.clientes[cliente].color) registerUsedColor(DATA.clientes[cliente].color);
