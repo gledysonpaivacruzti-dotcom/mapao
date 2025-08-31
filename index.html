@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Mapa DWDM — v10 (Canvas + export correto)</title>
+<title>Mapa DWDM — v11 (Canvas + export centrado)</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
   :root{ --bg:#f6f7fb; --fg:#111; --muted:#374151; --card:#fff; --bd:#e5e7eb; }
@@ -90,10 +90,7 @@
   </div>
   <div class="credit">Afastamento automático nas rotas sobrepostas • Controles de zoom no canto inferior direito</div>
 
-  <!-- Modais iguais aos da versão anterior (Adicionar / Editar / Cidade) -->
-  <!-- ... (por brevidade, são idênticos aos já enviados; mantive os mesmos ids/inputs/botões) ... -->
-
-  <!-- Modais (copiados do v9) -->
+  <!-- Modais -->
   <div class="modal" id="modalAdd">
     <div class="card">
       <h3 style="margin:0 0 8px 0;">Adicionar canal</h3>
@@ -303,10 +300,10 @@
     function initMap(){
       map = L.map('map',{
         zoomControl:false, zoomSnap:0.25, zoomDelta:0.5, minZoom:4, maxZoom:18,
-        preferCanvas:true   // <- chave para Canvas ser o padrão
+        preferCanvas:true
       }).setView([-5.5,-41.5],6);
 
-      CANV = L.canvas({padding:0.5}); // renderer global
+      CANV = L.canvas({padding:0.5});
 
       L.control.zoom({position:'bottomright'}).addTo(map);
       BASE_LIGHT = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -315,7 +312,6 @@
         {attribution:'&copy; Carto, OpenStreetMap', crossOrigin:'anonymous'});
       currentBase = BASE_LIGHT.addTo(map);
 
-      // Recalcular offsets em eventos do mapa
       const recalc=()=>{
         Object.values(CLIENT_LAYERS).forEach(g=>g.getLayers().forEach(l=>{ if(l.__recalc) l.__recalc(); }));
         if (HILAYER) HILAYER.getLayers().forEach(l=>{ if(l.__recalc) l.__recalc(); });
@@ -356,7 +352,7 @@
     }
     function makeOffsetPolyline(basePts, offsets, style){
       const ll=offsetLatLngs(basePts, offsets);
-      const line=L.polyline(ll, Object.assign({renderer: CANV}, style)); // Canvas!
+      const line=L.polyline(ll, Object.assign({renderer: CANV}, style));
       line.__base=basePts.slice(); line.__offs=offsets.slice();
       line.__recalc=function(){ this.setLatLngs(offsetLatLngs(this.__base,this.__offs)); };
       return line;
@@ -391,7 +387,7 @@
       return offs;
     }
 
-    /* ---------- destaque/seleção (Canvas) ---------- */
+    /* ---------- destaque/seleção ---------- */
     function clearSelect(){ if(SELAYER){ SELAYER.remove(); SELAYER=null; } }
     function selectRoute(rec, center=false){
       clearSelect();
@@ -538,7 +534,7 @@
       });
     }
 
-    /* ---------- load/export/center ---------- */
+    /* ---------- load/export/center (com patches) ---------- */
     function normalizeJSON(json){
       const raw=json.CITY_COORDS||json.CITY||{}; const city={};
       Object.keys(raw).forEach(k=>{ const v=raw[k]; city[k]=Array.isArray(v)?{lat:+v[0],lng:+v[1]}:{lat:+v.lat,lng:+v.lng}; });
@@ -581,7 +577,17 @@
       Object.keys(CITY_COORDS||{}).sort().forEach(k=>{ const o=document.createElement('option'); o.value=k; dl.appendChild(o); });
     }
 
-    function getRoutesBounds(){ if(!ALL_LINES.length) return null; let b=null; for(const rec of ALL_LINES){ const lb=rec.line.getBounds(); b = b? b.extend(lb): L.latLngBounds(lb); } return b; }
+    // PATCH 1: bounds pelas coordenadas cruas
+    function getRoutesBounds(){
+      if(!ALL_LINES.length) return null;
+      let b=null;
+      for(const rec of ALL_LINES){
+        if(!rec.pts || rec.pts.length===0) continue;
+        const lb=L.latLngBounds(rec.pts);
+        b = b ? b.extend(lb) : L.latLngBounds(lb);
+      }
+      return b;
+    }
     function fitBoundsAsync(bounds,pad=0.06){
       if(!bounds) return Promise.resolve();
       return new Promise(res=>{
@@ -595,14 +601,33 @@
         map.once('moveend', fin); setTimeout(fin, 450); map.setView(center, zoom);
       });
     }
+    // PATCH 2: esperar tiles
+    function waitTilesLoaded(timeoutMs = 1200){
+      return new Promise(resolve=>{
+        const layer = currentBase;
+        if (!layer || !layer._map){ resolve(); return; }
+        let done=false;
+        const fin=()=>{ if(!done){done=true; resolve();} };
+        if (!layer._loading){ fin(); return; }
+        layer.once('load', fin);
+        setTimeout(fin, timeoutMs);
+      });
+    }
+    // PATCH 3: usar bounds crus + esperar tiles
     async function withFittedRoutesView(cb){
       const bounds=getRoutesBounds();
       const prev={center:map.getCenter(), zoom:map.getZoom()};
-      if(bounds) await fitBoundsAsync(bounds, 0.06);
-      await new Promise(r=>setTimeout(r,150));
+      if(bounds){
+        await fitBoundsAsync(bounds, 0.06);
+        await waitTilesLoaded();
+        await new Promise(r=>setTimeout(r,120));
+      }
       try{ return await cb(); }
       finally{
-        if(bounds){ await setViewAsync(prev.center, prev.zoom); await new Promise(r=>setTimeout(r,80)); }
+        if(bounds){
+          await setViewAsync(prev.center, prev.zoom);
+          await new Promise(r=>setTimeout(r,80));
+        }
       }
     }
     function hideUI(hide){
@@ -671,7 +696,6 @@
         a.href=URL.createObjectURL(blob); a.download='mapadwdm_atualizado.json'; a.click(); URL.revokeObjectURL(a.href); };
       $('btnCenterMap').onclick=()=>{ const b=getRoutesBounds(); if(b) map.fitBounds(b.pad(0.08)); };
 
-      // modais (iguais ao v9)...
       $('btnAdd').onclick=openAddModal; $('btnCancelAdd').onclick=closeAddModal; $('btnSaveAdd').onclick=saveAdd;
       $('addId').oninput=e=> e.target.value=e.target.value.toUpperCase();
       $('addTipo').onchange=e=>{ const own=e.target.value==='proprio'; $('addParc').disabled=own; if(own) $('addParc').value=''; };
