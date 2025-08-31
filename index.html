@@ -3,8 +3,12 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Mapa DWDM — v11 (Canvas + export centrado)</title>
+<title>Mapa DWDM — v11-fix (parser tolerante)</title>
+
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<!-- JSON5 para aceitar vírgulas finais, comentários, aspas simples etc. -->
+<script src="https://cdn.jsdelivr.net/npm/json5@2.2.3/dist/index.min.js"></script>
+
 <style>
   :root{ --bg:#f6f7fb; --fg:#111; --muted:#374151; --card:#fff; --bd:#e5e7eb; }
   body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;}
@@ -90,7 +94,7 @@
   </div>
   <div class="credit">Afastamento automático nas rotas sobrepostas • Controles de zoom no canto inferior direito</div>
 
-  <!-- Modais -->
+  <!-- Modais (Adicionar / Editar / Nova cidade) – mesmo conteúdo das versões anteriores -->
   <div class="modal" id="modalAdd">
     <div class="card">
       <h3 style="margin:0 0 8px 0;">Adicionar canal</h3>
@@ -200,14 +204,14 @@
     const SHIFT_GAP   = 12;
     const OFFSET_MODE = 'constant';
 
-    let DATA=null, CITY_COORDS=null;
+    let DATA=null, CITY_COORDS=null, CITY_BOUNDS=null;
     let map, BASE_LIGHT, BASE_DARK, currentBase, CANV;
     let CLIENT_LAYERS={}, HILAYER=null, SELAYER=null, ALL_LINES=[];
     let CLIENT_VISIBLE={};
 
     const $ = id => document.getElementById(id);
 
-    /* ---------- cores bem separadas ---------- */
+    /* =================== CORES BEM SEPARADAS =================== */
     const USED=[]; const MIN_DELTAE=28;
     function hexToRgb(hex){ const h=hex.replace('#','').trim(); const n=parseInt(h.length===3?h.split('').map(c=>c+c).join(''):h,16); return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}; }
     function hslToRgb(h,s,l){ s/=100; l/=100; const C=(1-Math.abs(2*l-1))*s, hp=h/60, X=C*(1-Math.abs((hp%2)-1)); let r1=0,g1=0,b1=0;
@@ -239,6 +243,7 @@
       let hash=0; for(let i=0;i<n.length;i++) hash=(hash*31+n.charCodeAt(i))>>>0;
       let baseHue = hash % 360; const GOLD=137.508, SATS=[72,64,80], LIGHTS=[50,58,42];
       let best={hex:'#f0f', lab:null, score:-1};
+      function hsl(h,s,l){ const {r,g,b}=hslToRgb(h,s,l); return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
       for(let i=0;i<360;i++){
         const h=(baseHue + i*GOLD)%360;
         for(let sI=0;sI<SATS.length;sI++)
@@ -246,7 +251,7 @@
             const s=SATS[(sI+i)%SATS.length], l=LIGHTS[(lI+i)%LIGHTS.length];
             const {r,g,b}=hslToRgb(h,s,l); const lab=rgbToLab(r,g,b);
             let minD=Infinity; for(const u of USED){ const d=deltaE00(lab,u.lab); if(d<minD) minD=d; if(minD<MIN_DELTAE) break; }
-            const hex='#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+            const hex=hsl(h,s,l);
             if(minD>=MIN_DELTAE){ registerUsedColor(hex); return hex; }
             if(minD>best.score) best={hex,lab,score:minD};
           }
@@ -254,7 +259,7 @@
       registerUsedColor(best.hex); return best.hex;
     }
 
-    /* ---------- proximidade ---------- */
+    /* =================== PROXIMIDADE (ALT) =================== */
     function pointSegDist(p, a, b){
       const abx=b.x-a.x, aby=b.y-a.y, apx=p.x-a.x, apy=p.y-a.y;
       const ab2=abx*abx+aby*aby; let t=ab2? (apx*abx+apy*aby)/ab2 : 0;
@@ -263,32 +268,20 @@
       return Math.hypot(p.x-x, p.y-y);
     }
     function routeMinDistPx(rec, latlng){
-      const p=map.latLngToLayerPoint(latlng);
-      const ll=rec.line.getLatLngs();
-      let min=Infinity;
-      for(let i=0;i<ll.length-1;i++){
-        const a=map.latLngToLayerPoint(ll[i]);
-        const b=map.latLngToLayerPoint(ll[i+1]);
-        min=Math.min(min, pointSegDist(p,a,b));
-      }
+      const p=map.latLngToLayerPoint(latlng); const ll=rec.line.getLatLngs(); let min=Infinity;
+      for(let i=0;i<ll.length-1;i++){ const a=map.latLngToLayerPoint(ll[i]), b=map.latLngToLayerPoint(ll[i+1]); min=Math.min(min, pointSegDist(p,a,b)); }
       return min;
     }
     function showNearbyRoutes(latlng){
-      const cand=[];
-      for(const rec of ALL_LINES){
-        const d=routeMinDistPx(rec, latlng);
-        if(d<=18) cand.push({rec,d});
-      }
-      if(!cand.length) return false;
-      cand.sort((a,b)=>a.d-b.d);
+      const cand=[]; for(const rec of ALL_LINES){ const d=routeMinDistPx(rec, latlng); if(d<=18) cand.push({rec,d}); }
+      if(!cand.length) return false; cand.sort((a,b)=>a.d-b.d);
       const div=document.createElement('div');
-      div.innerHTML = '<b>Canais próximos</b><br>' +
-        cand.slice(0,10).map((c,i)=>`
-          <div style="margin:4px 0; display:flex; gap:6px; align-items:center">
-            <span style="width:10px;height:10px;border-radius:50%;background:${c.rec.line.options.color};display:inline-block"></span>
-            <button data-i="${i}">selecionar</button>
-            <span>${(c.rec.canalRef.id||'—').toUpperCase()} — ${c.rec.cliente}</span>
-          </div>`).join('');
+      div.innerHTML='<b>Canais próximos</b><br>'+cand.slice(0,10).map((c,i)=>`
+        <div style="margin:4px 0; display:flex; gap:6px; align-items:center">
+          <span style="width:10px;height:10px;border-radius:50%;background:${c.rec.line.options.color};display:inline-block"></span>
+          <button data-i="${i}">selecionar</button>
+          <span>${(c.rec.canalRef.id||'—').toUpperCase()} — ${c.rec.cliente}</span>
+        </div>`).join('');
       const pop=L.popup().setLatLng(latlng).setContent(div).openOn(map);
       div.querySelectorAll('button').forEach(b=>{
         b.onclick=()=>{ const c=cand[+b.dataset.i].rec; selectRoute(c,true); pop.remove(); };
@@ -296,11 +289,11 @@
       return true;
     }
 
-    /* ---------- mapa (Canvas!) ---------- */
+    /* =================== MAPA =================== */
     function initMap(){
       map = L.map('map',{
-        zoomControl:false, zoomSnap:0.25, zoomDelta:0.5, minZoom:4, maxZoom:18,
-        preferCanvas:true
+        zoomControl:false, zoomSnap:0.25, zoomDelta:0.5, minZoom:3, maxZoom:20,
+        preferCanvas:true, worldCopyJump:false, inertia:true
       }).setView([-5.5,-41.5],6);
 
       CANV = L.canvas({padding:0.5});
@@ -326,7 +319,7 @@
       });
     }
 
-    /* ---------- utils ---------- */
+    /* =================== HELPERS =================== */
     const rnd = v => Number(v).toFixed(5);
     const segKey = (a,b)=>{ const k1=rnd(a.lat)+','+rnd(a.lng), k2=rnd(b.lat)+','+rnd(b.lng); return (k1<k2)?(k1+'|'+k2):(k2+'|'+k1); };
     function getCoord(city){ const v=CITY_COORDS?.[city]; if(!v) return null; return Array.isArray(v)?{lat:+v[0],lng:+v[1]}:{lat:+v.lat,lng:+v.lng}; }
@@ -387,7 +380,7 @@
       return offs;
     }
 
-    /* ---------- destaque/seleção ---------- */
+    /* =================== DESTAQUE / SELEÇÃO =================== */
     function clearSelect(){ if(SELAYER){ SELAYER.remove(); SELAYER=null; } }
     function selectRoute(rec, center=false){
       clearSelect();
@@ -401,7 +394,7 @@
       if(center){ map.fitBounds(L.latLngBounds(path).pad(0.08)); }
     }
 
-    /* ---------- render ---------- */
+    /* =================== RENDER =================== */
     function render(){
       if(!DATA?.clientes) return;
       Object.values(CLIENT_LAYERS).forEach(g=>g.remove()); CLIENT_LAYERS={};
@@ -514,10 +507,11 @@
         });
       });
 
-      if(bounds.length) map.fitBounds(L.latLngBounds(bounds).pad(0.08));
+      const b = bounds.length ? L.latLngBounds(bounds).pad(0.08) : CITY_BOUNDS;
+      if (b) map.fitBounds(clampBoundsToCity(b));
     }
 
-    /* ---------- busca/destaque ---------- */
+    /* =================== BUSCA / HIGHLIGHT =================== */
     function clearHighlight(){
       if(HILAYER){HILAYER.remove();HILAYER=null;}
       ALL_LINES.forEach(({line,hit})=>{ line.setStyle({opacity:0.98}); hit.setStyle({opacity:0.001}); });
@@ -534,59 +528,95 @@
       });
     }
 
-    /* ---------- load/export/center (com patches) ---------- */
+    /* =================== PARSER TOLERANTE (NOVO) =================== */
+    function sanitizeJsonText(txt){
+      txt = txt.replace(/^\uFEFF/, '');              // BOM
+      txt = txt.replace(/\/\*[\s\S]*?\*\//g, '')     // /* ... */
+               .replace(/(^|[^:])\/\/[^\n\r]*/g, '$1'); // // ...
+      txt = txt.replace(/,\s*(?=[}\]])/g, '');       // vírgulas finais
+      return txt;
+    }
+    async function parseMaybe(txt){
+      try {
+        return JSON.parse(sanitizeJsonText(txt));
+      } catch(e1){
+        try {
+          return (window.JSON5 ? window.JSON5.parse(txt) : JSON.parse(sanitizeJsonText(txt)));
+        } catch(e2){
+          const msg = (e2 && e2.message) ? e2.message : (e1 && e1.message) || 'Formato inválido';
+          throw new Error('JSON inválido: ' + msg);
+        }
+      }
+    }
+
+    /* =================== LOAD / EXPORT / CENTER =================== */
     function normalizeJSON(json){
       const raw=json.CITY_COORDS||json.CITY||{}; const city={};
       Object.keys(raw).forEach(k=>{ const v=raw[k]; city[k]=Array.isArray(v)?{lat:+v[0],lng:+v[1]}:{lat:+v.lat,lng:+v.lng}; });
-      let clientes=(json.DATA&&json.DATA.clientes)?json.DATA.clientes:json.clientes; if(!clientes&&json.DATA) clientes=json.DATA; if(!clientes) clientes={};
+      let clientes=(json.DATA&&json.DATA.clientes)?json.DATA.clientes:json.clientes;
+      if(!clientes && json.DATA) clientes=json.DATA;
       return {city,clientes};
     }
-    async function parseMaybe(txt){
-      try{ return JSON.parse(txt); }
-      catch(e){
-        const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/json5@2.2.3/dist/index.min.js';
-        await new Promise((ok,ko)=>{ s.onload=ok; s.onerror=ko; document.head.appendChild(s); });
-        return window.JSON5.parse(txt);
-      }
+    function computeCityBounds(){
+      const pts = Object.values(CITY_COORDS||{}).map(v=> Array.isArray(v)? L.latLng(+v[0],+v[1]) : L.latLng(+v.lat,+v.lng) );
+      return pts.length ? L.latLngBounds(pts).pad(0.25) : null;
     }
+    function clampBoundsToCity(b){
+      if(!CITY_BOUNDS) return b;
+      const c=b.getCenter(), ok = CITY_BOUNDS.pad(0.6).contains(c);
+      return ok ? b : CITY_BOUNDS;
+    }
+
     async function loadFromURL(){
-      if (location.protocol==='file:'){
-        alert('Abra o JSON pelo botão "Carregar JSON" (o navegador bloqueia fetch em file://).');
-        return;
-      }
-      const txt=await fetch(JSON_URL+'?v='+Date.now(), {cache:'no-store'}).then(r=>r.text());
-      const j=await parseMaybe(txt); const n=normalizeJSON(j);
-      CITY_COORDS=n.city; DATA={clientes:n.clientes};
-      Object.values(DATA.clientes||{}).forEach(c=>{ if(c?.color) registerUsedColor(c.color); });
-      buildCityDatalist(); render();
+      try{
+        if (location.protocol==='file:'){ alert('Abrindo do disco: use o botão "Carregar JSON" para selecionar o arquivo.'); return; }
+        const resp = await fetch(JSON_URL+'?v='+Date.now(), {cache:'no-store'});
+        if(!resp.ok){ alert(`Falha ao baixar ${JSON_URL} (HTTP ${resp.status}).`); return; }
+        const txt = await resp.text();
+        const j   = await parseMaybe(txt);
+        const n   = normalizeJSON(j);
+        if(!n.city || !n.clientes || !Object.keys(n.clientes).length){
+          alert('JSON carregado, mas sem clientes. Verifique a estrutura (CITY_COORDS e DATA/clients).'); return;
+        }
+        CITY_COORDS=n.city; DATA={clientes:n.clientes};
+        Object.values(DATA.clientes||{}).forEach(c=>{ if(c?.color) registerUsedColor(c.color); });
+        CITY_BOUNDS = computeCityBounds(); if(CITY_BOUNDS) map.setMaxBounds(CITY_BOUNDS.pad(1.2));
+        buildCityDatalist(); render();
+      }catch(err){ console.error(err); alert('JSON inválido: '+(err && err.message ? err.message : err)); }
     }
+
     function loadFromFile(file){
       const rd=new FileReader();
       rd.onload=async e=>{
         try{
-          const j=await parseMaybe(e.target.result); const n=normalizeJSON(j);
+          const j=await parseMaybe(e.target.result);
+          const n=normalizeJSON(j);
+          if(!n.city || !n.clientes || !Object.keys(n.clientes).length){
+            alert('Arquivo lido, mas não encontrei clientes. Verifique a estrutura do JSON.'); return;
+          }
           CITY_COORDS=n.city; DATA={clientes:n.clientes};
           Object.values(DATA.clientes||{}).forEach(c=>{ if(c?.color) registerUsedColor(c.color); });
+          CITY_BOUNDS = computeCityBounds(); if(CITY_BOUNDS) map.setMaxBounds(CITY_BOUNDS.pad(1.2));
           buildCityDatalist(); render();
-        }catch(err){ alert('JSON inválido (remova vírgulas finais/comentários).'); }
+        }catch(err){ console.error(err); alert('JSON inválido: '+(err && err.message ? err.message : err)); }
       };
       rd.readAsText(file,'utf-8');
     }
+
     function buildCityDatalist(){
       const dl=$('citiesList'); dl.innerHTML='';
       Object.keys(CITY_COORDS||{}).sort().forEach(k=>{ const o=document.createElement('option'); o.value=k; dl.appendChild(o); });
     }
 
-    // PATCH 1: bounds pelas coordenadas cruas
     function getRoutesBounds(){
-      if(!ALL_LINES.length) return null;
+      if(!ALL_LINES.length) return CITY_BOUNDS;
       let b=null;
       for(const rec of ALL_LINES){
         if(!rec.pts || rec.pts.length===0) continue;
         const lb=L.latLngBounds(rec.pts);
         b = b ? b.extend(lb) : L.latLngBounds(lb);
       }
-      return b;
+      return b ? clampBoundsToCity(b) : CITY_BOUNDS;
     }
     function fitBoundsAsync(bounds,pad=0.06){
       if(!bounds) return Promise.resolve();
@@ -601,7 +631,6 @@
         map.once('moveend', fin); setTimeout(fin, 450); map.setView(center, zoom);
       });
     }
-    // PATCH 2: esperar tiles
     function waitTilesLoaded(timeoutMs = 1200){
       return new Promise(resolve=>{
         const layer = currentBase;
@@ -613,7 +642,6 @@
         setTimeout(fin, timeoutMs);
       });
     }
-    // PATCH 3: usar bounds crus + esperar tiles
     async function withFittedRoutesView(cb){
       const bounds=getRoutesBounds();
       const prev={center:map.getCenter(), zoom:map.getZoom()};
@@ -650,7 +678,6 @@
         const a=document.createElement('a'); a.href=dataUrl; a.download='mapadwdm.png'; a.click();
       }catch(e){ hideUI(false); alert('Falha ao exportar PNG: '+e.message); }
     }
-
     async function exportPDF(){
       try{
         hideUI(true);
@@ -672,9 +699,9 @@
       }catch(e){ hideUI(false); alert('Falha ao exportar PDF: '+e.message); }
     }
 
-    /* ---------- UI ---------- */
+    /* =================== UI =================== */
     function initUI(){
-      $('btnFetch').onclick = ()=> loadFromURL().catch(err=> alert('Erro carregando JSON: '+err.message));
+      $('btnFetch').onclick = ()=> loadFromURL();
       $('fileJSON').onchange = e=>{ if(e.target.files?.[0]) loadFromFile(e.target.files[0]); };
       ['tProprio','tCedido','tRecebido','chkPontos'].forEach(id=> $(id).onchange=render);
       $('chkDark').onchange = e=>{ map.removeLayer(currentBase); currentBase=(e.target.checked?BASE_DARK:BASE_LIGHT).addTo(map); };
@@ -696,82 +723,85 @@
         a.href=URL.createObjectURL(blob); a.download='mapadwdm_atualizado.json'; a.click(); URL.revokeObjectURL(a.href); };
       $('btnCenterMap').onclick=()=>{ const b=getRoutesBounds(); if(b) map.fitBounds(b.pad(0.08)); };
 
+      // atalhos dos modais (mesmo comportamento que você já tinha)
+      const addChip=(ct,val)=>{ const d=document.createElement('span'); d.className='chip'; d.dataset.city=val;
+        const b=document.createElement('button'); b.textContent='×'; b.onclick=()=>d.remove(); d.append(val,b); ct.appendChild(d); };
+      const getChips=ct=> Array.from(ct.querySelectorAll('.chip')).map(x=>x.dataset.city);
+      const chipsFromText=t=> t.split(/>|→|->|—|,|;|\n/).map(s=>s.trim()).filter(Boolean);
+
+      function openCityModal(onSave){
+        $('cityName').value=''; $('cityLat').value=''; $('cityLng').value=''; $('cityWarn').textContent='';
+        $('modalCity').style.display='flex';
+        $('btnCancelCity').onclick=()=> $('modalCity').style.display='none';
+        $('btnSaveCity').onclick=()=>{
+          const name=$('cityName').value.trim(); const lat=parseFloat($('cityLat').value.trim()); const lng=parseFloat($('cityLng').value.trim());
+          if(!name||isNaN(lat)||isNaN(lng)){ $('cityWarn').textContent='Preencha nome, latitude e longitude válidos.'; return; }
+          if(!CITY_COORDS) CITY_COORDS={}; CITY_COORDS[name]={lat,lng}; buildCityDatalist();
+          $('modalCity').style.display='none'; if(onSave) onSave(name);
+        };
+      }
+
+      function openAddModal(){
+        $('addCliente').value=''; $('addId').value=''; $('addTipo').value='proprio';
+        document.querySelectorAll('#addCaps input[type="radio"]').forEach((r,i)=> r.checked=(i===0));
+        $('addParc').value=''; $('addParc').disabled=true; $('addSaltosChips').innerHTML=''; $('addSaltosIn').value=''; $('addWarn').textContent='';
+        $('modalAdd').style.display='flex';
+      }
+      function closeAddModal(){ $('modalAdd').style.display='none'; }
+      function saveAdd(){
+        const cliente=$('addCliente').value.trim(); const id=$('addId').value.trim().toUpperCase(); const tipo=$('addTipo').value;
+        const cap=(document.querySelector('#addCaps input:checked')||{}).value||''; const parc=$('addParc').value.trim();
+        let saltos=getChips($('addSaltosChips')); if(!saltos.length) saltos=chipsFromText($('addSaltosIn').value);
+        if(!cliente||!id||!saltos.length){ $('addWarn').textContent='Preencha Cliente, ID e Saltos.'; return; }
+        const unknown=saltos.filter(c=>!getCoord(c)); if(unknown.length){ $('addWarn').textContent='Cidade(s) não encontrada(s): '+unknown.join(', '); return; }
+        if(!DATA) DATA={clientes:{}}; if(!DATA.clientes) DATA.clientes={};
+        if(!DATA.clientes[cliente]){
+          const color = getOrCreateClientColor(cliente);
+          DATA.clientes[cliente] = { color, canais: [] };
+        } else {
+          if (DATA.clientes[cliente].color) registerUsedColor(DATA.clientes[cliente].color);
+        }
+        DATA.clientes[cliente].canais.push({id,tipo,capacidade:cap,parceiro:parc,saltos});
+        closeAddModal(); render(); $('txtSearch').value=id; highlight(id);
+      }
+
+      function openEditModal(cliente,idx){
+        const canal=(DATA.clientes[cliente].canais||[])[idx]; if(!canal) return;
+        $('editCliente').value=cliente; $('editId').value=(canal.id||'').toUpperCase(); $('editTipo').value=(canal.tipo||'proprio');
+        document.querySelectorAll('#editCaps input[type="radio"]').forEach(r=> r.checked=(r.value===(canal.capacidade||'100G')));
+        $('editParc').value=canal.parceiro||''; $('editParc').disabled=( $('editTipo').value==='proprio' );
+        $('editSaltosChips').innerHTML=''; (canal.saltos||[]).forEach(s=> addChip($('editSaltosChips'), s));
+        $('editSaltosIn').value=''; $('editWarn').textContent=''; $('modalEdit').style.display='flex';
+        window.__lastEdit={cliente,idx};
+      }
+      function closeEditModal(){ $('modalEdit').style.display='none'; }
+      function saveEdit(){
+        const cliente=$('editCliente').value; const id=$('editId').value.trim().toUpperCase(); const tipo=$('editTipo').value;
+        const cap=(document.querySelector('#editCaps input:checked')||{}).value||''; const parc=$('editParc').value.trim();
+        const saltos=Array.from(document.querySelectorAll('#editSaltosChips .chip')).map(x=>x.dataset.city);
+        if(!cliente||!id||!saltos.length){ $('editWarn').textContent='Preencha ID e Saltos.'; return; }
+        const unknown=saltos.filter(c=>!getCoord(c)); if(unknown.length){ $('editWarn').textContent='Cidade(s) não encontrada(s): '+unknown.join(', '); return; }
+        const i=(window.__lastEdit&&window.__lastEdit.cliente===cliente)?window.__lastEdit.idx:-1;
+        if(i>=0 && DATA.clientes[cliente].canais[i]) DATA.clientes[cliente].canais[i]={id,tipo,capacidade:cap,parceiro:parc,saltos};
+        closeEditModal(); render(); $('txtSearch').value=id; highlight(id);
+      }
+
       $('btnAdd').onclick=openAddModal; $('btnCancelAdd').onclick=closeAddModal; $('btnSaveAdd').onclick=saveAdd;
       $('addId').oninput=e=> e.target.value=e.target.value.toUpperCase();
       $('addTipo').onchange=e=>{ const own=e.target.value==='proprio'; $('addParc').disabled=own; if(own) $('addParc').value=''; };
-      $('btnAddSalto').onclick=()=>{ const v=$('addSaltosIn').value.trim(); if(!v) return; addChip($('addSaltosChips'), v); $('addSaltosIn').value=''; };
+      $('btnAddSalto').onclick=()=>{ const v=$('addSaltosIn').value.trim(); if(!v) return; addChip(document.getElementById('addSaltosChips'), v); $('addSaltosIn').value=''; };
       $('addSaltosIn').onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); $('btnAddSalto').click(); } };
       $('btnAddCidade').onclick=()=> openCityModal(name=> $('addSaltosIn').value=name);
 
       $('btnCancelEdit').onclick=closeEditModal; $('btnSaveEdit').onclick=saveEdit;
       $('editId').oninput=e=> e.target.value=e.target.value.toUpperCase();
       $('editTipo').onchange=e=>{ const own=e.target.value==='proprio'; $('editParc').disabled=own; if(own) $('editParc').value=''; };
-      $('btnEditAddSalto').onclick=()=>{ const v=$('editSaltosIn').value.trim(); if(!v) return; addChip($('editSaltosChips'), v); $('editSaltosIn').value=''; };
+      $('btnEditAddSalto').onclick=()=>{ const v=$('editSaltosIn').value.trim(); if(!v) return; addChip(document.getElementById('editSaltosChips'), v); $('editSaltosIn').value=''; };
       $('editSaltosIn').onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); $('btnEditAddSalto').click(); } };
       $('btnEditAddCidade').onclick=()=> openCityModal(name=> $('editSaltosIn').value=name);
     }
 
-    /* helpers chips / modais */
-    function addChip(ct,val){ const d=document.createElement('span'); d.className='chip'; d.dataset.city=val;
-      const b=document.createElement('button'); b.textContent='×'; b.onclick=()=>d.remove(); d.append(val,b); ct.appendChild(d); }
-    function getChips(ct){ return Array.from(ct.querySelectorAll('.chip')).map(x=>x.dataset.city); }
-    function chipsFromText(t){ return t.split(/>|→|->|—|,|;|\n/).map(s=>s.trim()).filter(Boolean); }
-    function openCityModal(onSave){
-      $('cityName').value=''; $('cityLat').value=''; $('cityLng').value=''; $('cityWarn').textContent='';
-      $('modalCity').style.display='flex';
-      $('btnCancelCity').onclick=()=> $('modalCity').style.display='none';
-      $('btnSaveCity').onclick=()=>{
-        const name=$('cityName').value.trim(); const lat=parseFloat($('cityLat').value.trim()); const lng=parseFloat($('cityLng').value.trim());
-        if(!name||isNaN(lat)||isNaN(lng)){ $('cityWarn').textContent='Preencha nome, latitude e longitude válidos.'; return; }
-        if(!CITY_COORDS) CITY_COORDS={}; CITY_COORDS[name]={lat,lng}; buildCityDatalist();
-        $('modalCity').style.display='none'; if(onSave) onSave(name);
-      };
-    }
-    function openAddModal(){
-      $('addCliente').value=''; $('addId').value=''; $('addTipo').value='proprio';
-      document.querySelectorAll('#addCaps input[type="radio"]').forEach((r,i)=> r.checked=(i===0));
-      $('addParc').value=''; $('addParc').disabled=true; $('addSaltosChips').innerHTML=''; $('addSaltosIn').value=''; $('addWarn').textContent='';
-      $('modalAdd').style.display='flex';
-    }
-    function closeAddModal(){ $('modalAdd').style.display='none'; }
-    function saveAdd(){
-      const cliente=$('addCliente').value.trim(); const id=$('addId').value.trim().toUpperCase(); const tipo=$('addTipo').value;
-      const cap=(document.querySelector('#addCaps input:checked')||{}).value||''; const parc=$('addParc').value.trim();
-      let saltos=getChips($('addSaltosChips')); if(!saltos.length) saltos=chipsFromText($('addSaltosIn').value);
-      if(!cliente||!id||!saltos.length){ $('addWarn').textContent='Preencha Cliente, ID e Saltos.'; return; }
-      const unknown=saltos.filter(c=>!getCoord(c)); if(unknown.length){ $('addWarn').textContent='Cidade(s) não encontrada(s): '+unknown.join(', '); return; }
-      if(!DATA) DATA={clientes:{}}; if(!DATA.clientes) DATA.clientes={};
-      if(!DATA.clientes[cliente]){
-        const color = getOrCreateClientColor(cliente);
-        DATA.clientes[cliente] = { color, canais: [] };
-      } else {
-        if (DATA.clientes[cliente].color) registerUsedColor(DATA.clientes[cliente].color);
-      }
-      DATA.clientes[cliente].canais.push({id,tipo,capacidade:cap,parceiro:parc,saltos});
-      closeAddModal(); render(); $('txtSearch').value=id; highlight(id);
-    }
-    function openEditModal(cliente,idx){
-      const canal=(DATA.clientes[cliente].canais||[])[idx]; if(!canal) return;
-      $('editCliente').value=cliente; $('editId').value=(canal.id||'').toUpperCase(); $('editTipo').value=(canal.tipo||'proprio');
-      document.querySelectorAll('#editCaps input[type="radio"]').forEach(r=> r.checked=(r.value===(canal.capacidade||'100G')));
-      $('editParc').value=canal.parceiro||''; $('editParc').disabled=( $('editTipo').value==='proprio' );
-      $('editSaltosChips').innerHTML=''; (canal.saltos||[]).forEach(s=> addChip($('editSaltosChips'), s));
-      $('editSaltosIn').value=''; $('editWarn').textContent=''; $('modalEdit').style.display='flex';
-      window.__lastEdit={cliente,idx};
-    }
-    function closeEditModal(){ $('modalEdit').style.display='none'; }
-    function saveEdit(){
-      const cliente=$('editCliente').value; const id=$('editId').value.trim().toUpperCase(); const tipo=$('editTipo').value;
-      const cap=(document.querySelector('#editCaps input:checked')||{}).value||''; const parc=$('editParc').value.trim();
-      const saltos=getChips($('editSaltosChips'));
-      if(!cliente||!id||!saltos.length){ $('editWarn').textContent='Preencha ID e Saltos.'; return; }
-      const unknown=saltos.filter(c=>!getCoord(c)); if(unknown.length){ $('editWarn').textContent='Cidade(s) não encontrada(s): '+unknown.join(', '); return; }
-      const i=(window.__lastEdit&&window.__lastEdit.cliente===cliente)?window.__lastEdit.idx:-1;
-      if(i>=0 && DATA.clientes[cliente].canais[i]) DATA.clientes[cliente].canais[i]={id,tipo,capacidade:cap,parceiro:parc,saltos};
-      closeEditModal(); render(); $('txtSearch').value=id; highlight(id);
-    }
-
-    /* ---------- boot ---------- */
+    /* =================== BOOT =================== */
     initMap();
     initUI();
     loadFromURL().catch(()=>{});
