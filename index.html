@@ -449,7 +449,7 @@
           const style={renderer:CANV, color, weight:4, opacity:.98, lineJoin:'round', dashArray:dash, lineCap:'round'};
 
           const distKm=totalKm(pts);
-          const idEdit='e_'+uid(), idHi='h_'+uid(), idCtr='c_'+uid(), idDel='d_'+uid();
+          const idEdit='e_'+uid(), idHi='h_'+uid(), idCtr='c_'+uid();
           const popupHtml=`<div>
             <b>${(canal.id||'—').toUpperCase()}</b><br>
             Cliente: <b>${cli}</b><br>
@@ -462,7 +462,6 @@
               <button id="${idHi}">Destacar</button>
               <button id="${idCtr}">Centralizar percurso</button>
               <button id="${idEdit}">Editar canal</button>
-              <button id="${idDel}" class="danger">Excluir canal</button>
             </div>
           </div>`;
 
@@ -474,11 +473,10 @@
                         text:(cli+' '+(canal.id||'')+' '+(canal.capacidade||'')+' '+(canal.tipo||'')+' '+(canal.parceiro||'')+' '+saltos.join(' ')).toLowerCase() };
 
           const attach = ()=>{
-            const bE=document.getElementById(idEdit), bH=document.getElementById(idHi), bC=document.getElementById(idCtr), bD=document.getElementById(idDel);
+            const bE=document.getElementById(idEdit), bH=document.getElementById(idHi), bC=document.getElementById(idCtr);
             if(bE) bE.onclick=()=> openEditModal(cli,i);
             if(bH) bH.onclick=()=> selectRoute(rec,false);
             if(bC) bC.onclick=()=> selectRoute(rec,true);
-            if(bD) bD.onclick=()=>{ if(confirm('Excluir este canal?')){ const arr=DATA.clientes[cli].canais; if(arr && arr[i]){ arr.splice(i,1); map.closePopup(); render(); } } };
           };
           line.on('popupopen', attach); hit.on('popupopen', attach);
 
@@ -610,24 +608,7 @@
       Object.keys(CITY_COORDS||{}).sort().forEach(k=>{ const o=document.createElement('option'); o.value=k; dl.appendChild(o); });
     }
 
-    
-    function getVisibleRoutesBounds(){
-      try{
-        const group=L.featureGroup();
-        (ALL_LINES||[]).forEach(rec=>{
-          if(rec && rec.line && map.hasLayer(rec.line)){
-            const ll = rec.line.getLatLngs();
-            if(ll && ll.length){
-              group.addLayer(L.polyline(ll));
-            }
-          }
-        });
-        return group.getLayers().length ? clampBoundsToCity(group.getBounds()) : null;
-      }catch(e){
-        return null;
-      }
-    }
-function getRoutesBounds(){
+    function getRoutesBounds(){
       if(!ALL_LINES.length) return CITY_BOUNDS;
       let b=null;
       for(const rec of ALL_LINES){
@@ -661,7 +642,9 @@ function getRoutesBounds(){
         setTimeout(fin, timeoutMs);
       });
     }
-    async function withFittedRoutesView(cb){ const bounds=getVisibleRoutesBounds() || getRoutesBounds(); const prev={center:map.getCenter(), zoom:map.getZoom()};
+    async function withFittedRoutesView(cb){
+      const bounds=getRoutesBounds();
+      const prev={center:map.getCenter(), zoom:map.getZoom()};
       if(bounds){
         await fitBoundsAsync(bounds, 0.06);
         await waitTilesLoaded();
@@ -682,8 +665,6 @@ function getRoutesBounds(){
 
     async function exportPNG(){
       try{
-        map.closePopup();
-        if(!(ALL_LINES&&ALL_LINES.length)){ alert('Não há rotas no mapa para exportar.'); return; }
         hideUI(true);
         const dataUrl = await withFittedRoutesView(async ()=>{
           return await new Promise((resolve, reject)=>{
@@ -699,8 +680,6 @@ function getRoutesBounds(){
     }
     async function exportPDF(){
       try{
-        map.closePopup();
-        if(!(ALL_LINES&&ALL_LINES.length)){ alert('Não há rotas no mapa para exportar.'); return; }
         hideUI(true);
         const dataUrl = await withFittedRoutesView(async ()=>{
           return await new Promise((resolve, reject)=>{
@@ -786,7 +765,7 @@ function getRoutesBounds(){
         closeAddModal(); render(); $('txtSearch').value=id; highlight(id);
       }
 
-      window.openEditModal = function (cliente,idx){
+      function openEditModal(cliente,idx){
         const canal=(DATA.clientes[cliente].canais||[])[idx]; if(!canal) return;
         $('editCliente').value=cliente; $('editId').value=(canal.id||'').toUpperCase(); $('editTipo').value=(canal.tipo||'proprio');
         document.querySelectorAll('#editCaps input[type="radio"]').forEach(r=> r.checked=(r.value===(canal.capacidade||'100G')));
