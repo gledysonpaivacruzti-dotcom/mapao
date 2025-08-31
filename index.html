@@ -449,7 +449,7 @@
           const style={renderer:CANV, color, weight:4, opacity:.98, lineJoin:'round', dashArray:dash, lineCap:'round'};
 
           const distKm=totalKm(pts);
-          const idEdit='e_'+uid(), idHi='h_'+uid(), idCtr='c_'+uid();
+          const idEdit='e_'+uid(), idHi='h_'+uid(), idCtr='c_'+uid(), idDel='d_'+uid();
           const popupHtml=`<div>
             <b>${(canal.id||'—').toUpperCase()}</b><br>
             Cliente: <b>${cli}</b><br>
@@ -462,6 +462,7 @@
               <button id="${idHi}">Destacar</button>
               <button id="${idCtr}">Centralizar percurso</button>
               <button id="${idEdit}">Editar canal</button>
+              <button id="${idDel}" class="danger">Excluir canal</button>
             </div>
           </div>`;
 
@@ -473,10 +474,11 @@
                         text:(cli+' '+(canal.id||'')+' '+(canal.capacidade||'')+' '+(canal.tipo||'')+' '+(canal.parceiro||'')+' '+saltos.join(' ')).toLowerCase() };
 
           const attach = ()=>{
-            const bE=document.getElementById(idEdit), bH=document.getElementById(idHi), bC=document.getElementById(idCtr);
+            const bE=document.getElementById(idEdit), bH=document.getElementById(idHi), bC=document.getElementById(idCtr), bD=document.getElementById(idDel);
             if(bE) bE.onclick=()=> openEditModal(cli,i);
             if(bH) bH.onclick=()=> selectRoute(rec,false);
             if(bC) bC.onclick=()=> selectRoute(rec,true);
+            if(bD) bD.onclick=()=>{ if(confirm('Excluir este canal?')){ const arr=DATA.clientes[cli].canais; if(arr && arr[i]){ arr.splice(i,1); map.closePopup(); render(); } } };
           };
           line.on('popupopen', attach); hit.on('popupopen', attach);
 
@@ -765,7 +767,7 @@
         closeAddModal(); render(); $('txtSearch').value=id; highlight(id);
       }
 
-      function openEditModal(cliente,idx){
+      window.openEditModal = function (cliente,idx){
         const canal=(DATA.clientes[cliente].canais||[])[idx]; if(!canal) return;
         $('editCliente').value=cliente; $('editId').value=(canal.id||'').toUpperCase(); $('editTipo').value=(canal.tipo||'proprio');
         document.querySelectorAll('#editCaps input[type="radio"]').forEach(r=> r.checked=(r.value===(canal.capacidade||'100G')));
