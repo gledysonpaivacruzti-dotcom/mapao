@@ -235,6 +235,7 @@
       const Rt=-2*Math.sqrt(Math.pow(avgCp,7)/(Math.pow(avgCp,7)+Math.pow(25,7)))*Math.sin((60*Math.exp(-Math.pow((avgHp-275)/25,2)))*Math.PI/180);
       return Math.sqrt(Math.pow(dLp/Sl,2)+Math.pow(dCp/Sc,2)+Math.pow(dHp/Sh,2)+Rt*(dCp/Sc)*(dHp/Sh));
     }
+
     function normalizeHex(x){ x=String(x||'').trim(); return x? (x.startsWith('#')?x.toLowerCase():'#'+x.toLowerCase()):null; }
     function registerUsedColor(hex){ const hx=normalizeHex(hex); if(!hx) return; const {r,g,b}=hexToRgb(hx); const lab=rgbToLab(r,g,b); if(!USED.some(u=>u.hex===hx)) USED.push({hex:hx,lab}); }
     function getOrCreateClientColor(n){
@@ -475,10 +476,10 @@
 
           const attach = ()=>{
             const bE=document.getElementById(idEdit), bH=document.getElementById(idHi), bC=document.getElementById(idCtr), bD=document.getElementById(idDel);
-            if(bE) bE.onclick=()=> window.openEditModal(rec.cliente, rec.idx);   // <-- FIX: usa função global
+            if(bE) bE.onclick=()=> window.openEditModal(rec.cliente, rec.idx);
             if(bH) bH.onclick=()=> selectRoute(rec,false);
             if(bC) bC.onclick=()=> selectRoute(rec,true);
-            if(bD) bD.onclick=()=> window.deleteCanal(rec.cliente, rec.idx);     // botão excluir
+            if(bD) bD.onclick=()=> window.deleteCanal(rec.cliente, rec.idx);
           };
           line.on('popupopen', attach); hit.on('popupopen', attach);
 
@@ -526,7 +527,14 @@
         const m=r.text.includes(s);
         r.line.setStyle({opacity: m ? 0.98 : 0.15});
         r.hit.setStyle({opacity:m?0.05:0.001});
-        if(m) L.polyline(r.pts,{renderer:CANV, color:'#fffb00',weight:12,opacity:.35,interactive:false}).addTo(HILAYER);
+        if(m){
+          // camada visual (amarela)
+          const glow = L.polyline(r.pts,{renderer:CANV, color:'#fffb00',weight:12,opacity:.35,interactive:false}).addTo(HILAYER);
+          // “tapete” de clique: largo, invisível, captura o click no amarelo
+          const picker = L.polyline(r.pts,{renderer:CANV, color:'#000', weight:28, opacity:0.001, interactive:true});
+          picker.on('click', ev => { showNearbyRoutes(ev.latlng); });
+          picker.addTo(HILAYER);
+        }
       });
     }
 
@@ -725,7 +733,7 @@
         a.href=URL.createObjectURL(blob); a.download='mapadwdm_atualizado.json'; a.click(); URL.revokeObjectURL(a.href); };
       $('btnCenterMap').onclick=()=>{ const b=getRoutesBounds(); if(b) map.fitBounds(b.pad(0.08)); };
 
-      // atalhos dos modais (mesmo comportamento que você já tinha)
+      // atalhos dos modais
       const addChip=(ct,val)=>{ const d=document.createElement('span'); d.className='chip'; d.dataset.city=val;
         const b=document.createElement('button'); b.textContent='×'; b.onclick=()=>d.remove(); d.append(val,b); ct.appendChild(d); };
       const getChips=ct=> Array.from(ct.querySelectorAll('.chip')).map(x=>x.dataset.city);
@@ -767,7 +775,7 @@
         closeAddModal(); render(); $('txtSearch').value=id; highlight(id);
       }
 
-      /* ====== EDITAR / EXCLUIR: agora globais para uso no popup ====== */
+      /* ====== EDITAR / EXCLUIR: globais para uso no popup ====== */
       function openEditModal(cliente,idx){
         const canal=(DATA.clientes[cliente].canais||[])[idx]; if(!canal) return;
         $('editCliente').value=cliente; $('editId').value=(canal.id||'').toUpperCase(); $('editTipo').value=(canal.tipo||'proprio');
@@ -798,7 +806,6 @@
           clearAllFocus();
         }
       }
-      // expõe globalmente para o handler do popup
       window.openEditModal = openEditModal;
       window.deleteCanal   = deleteCanal;
 
