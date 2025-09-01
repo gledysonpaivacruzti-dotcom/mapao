@@ -272,6 +272,23 @@
       for(let i=0;i<ll.length-1;i++){ const a=map.latLngToLayerPoint(ll[i]), b=map.latLngToLayerPoint(ll[i+1]); min=Math.min(min, pointSegDist(p,a,b)); }
       return min;
     }
+    function closestPointOnRouteLatLng(rec, latlng){
+      const p = map.latLngToLayerPoint(latlng);
+      const ll = rec.line.getLatLngs();
+      let bestD = Infinity, bestPt = null;
+      for(let i=0;i<ll.length-1;i++){
+        const a = map.latLngToLayerPoint(ll[i]), b = map.latLngToLayerPoint(ll[i+1]);
+        const abx=b.x-a.x, aby=b.y-a.y, apx=p.x-a.x, apy=p.y-a.y;
+        const ab2=abx*abx+aby*aby; let t=ab2? (apx*abx+apy*aby)/ab2 : 0;
+        if(t<0) t=0; else if(t>1) t=1;
+        const x=a.x+abx*t, y=a.y+aby*t;
+        const d=Math.hypot(p.x-x, p.y-y);
+        if(d<bestD){ bestD=d; bestPt = map.layerPointToLatLng(L.point(x,y)); }
+      }
+      return bestPt || ll[Math.floor(ll.length/2)] || latlng;
+    }
+
+
     function showNearbyRoutes(latlng){
       const cand=[]; for(const rec of ALL_LINES){ const d=routeMinDistPx(rec, latlng); if(d<=18) cand.push({rec,d}); }
       if(!cand.length) return false; cand.sort((a,b)=>a.d-b.d);
@@ -284,7 +301,19 @@
         </div>`).join('');
       const pop=L.popup().setLatLng(latlng).setContent(div).openOn(map);
       div.querySelectorAll('button').forEach(b=>{
-        b.onclick=()=>{ const c=cand[+b.dataset.i].rec; selectRoute(c,true); pop.remove(); };
+        b.onclick=()=>{
+          const c=cand[+b.dataset.i].rec;
+          selectRoute(c,true);
+          try{
+            const where = (typeof closestPointOnRouteLatLng==='function') ? closestPointOnRouteLatLng(c, latlng) : latlng;
+            if (c && c.line && c.line.openPopup) {
+              c.line.openPopup(where || latlng);
+            } else if (c && c.hit && c.hit.openPopup) {
+              c.hit.openPopup(where || latlng);
+            }
+          }catch(e){/* no-op */}
+          pop.remove();
+        };
       });
       return true;
     }
@@ -522,12 +551,24 @@
     function highlight(q){
       clearHighlight(); const s=(q||'').trim().toLowerCase(); if(!s) return;
       HILAYER=L.layerGroup().addTo(map);
+      const bounds = [];
       ALL_LINES.forEach(r=>{
         const m=r.text.includes(s);
         r.line.setStyle({opacity: m ? 0.98 : 0.15});
         r.hit.setStyle({opacity:m?0.05:0.001});
-        if(m) L.polyline(r.pts,{renderer:CANV, color:'#fffb00',weight:12,opacity:.35,interactive:false}).addTo(HILAYER);
+        if(m){
+          const path = r.line.getLatLngs();
+          if (path && path.length){
+            try{ bounds.push(L.latLngBounds(path)); }catch(e){}
+          }
+          L.polyline(r.pts,{renderer:CANV, color:'#fffb00',weight:12,opacity:.35,interactive:false}).addTo(HILAYER);
+        }
       });
+      if (bounds.length){
+        let B = bounds[0];
+        for (let i=1;i<bounds.length;i++){ B = B.extend(bounds[i]); }
+        try{ map.fitBounds(B.pad(0.12)); }catch(e){}
+      }
     }
 
     /* =================== PARSER TOLERANTE (NOVO) =================== */
