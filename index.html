@@ -295,26 +295,39 @@
       const div=document.createElement('div');
       div.innerHTML='<b>Canais próximos</b><br>'+cand.slice(0,10).map((c,i)=>`
         <div style="margin:4px 0; display:flex; gap:6px; align-items:center">
-          <span style="width:10px;height:10px;border-radius:50%;background:${c.rec.line.options.color};display:inline-block"></span>
-          <button data-i="${i}">selecionar</button>
+          <span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:${c.rec.line.options.color}"></span>
+          <button data-i="${i}">Selecionar</button>
           <span>${(c.rec.canalRef.id||'—').toUpperCase()} — ${c.rec.cliente}</span>
         </div>`).join('');
-      const pop=L.popup().setLatLng(latlng).setContent(div).openOn(map);
+      const pop=L.popup({closeOnEscapeKey:true}).setLatLng(latlng).setContent(div).openOn(map);
+      let idx = 0;
+      const buttons = ()=> Array.from(div.querySelectorAll('button'));
+      const focusBtn = ()=>{ const arr=buttons(); if(arr[idx]) arr[idx].focus(); };
+      setTimeout(focusBtn, 0);
+      const closePop = ()=>{ try{ map.closePopup(pop); }catch(e){} };
+
       div.querySelectorAll('button').forEach(b=>{
         b.onclick=()=>{
           const c=cand[+b.dataset.i].rec;
           selectRoute(c,true);
           try{
             const where = (typeof closestPointOnRouteLatLng==='function') ? closestPointOnRouteLatLng(c, latlng) : latlng;
-            if (c && c.line && c.line.openPopup) {
-              c.line.openPopup(where || latlng);
-            } else if (c && c.hit && c.hit.openPopup) {
-              c.hit.openPopup(where || latlng);
-            }
-          }catch(e){/* no-op */}
-          pop.remove();
+            if (c && c.line && c.line.openPopup) c.line.openPopup(where || latlng);
+            else if (c && c.hit && c.hit.openPopup) c.hit.openPopup(where || latlng);
+          }catch(e){}
+          closePop();
         };
       });
+      // Keyboard navigation: ArrowUp/Down to move, Enter to choose, Esc to close
+      const onKey = (ev)=>{
+        const arr = buttons(); if (!arr.length) return;
+        if (ev.key === 'ArrowDown'){ ev.preventDefault(); idx = (idx+1)%arr.length; focusBtn(); }
+        else if (ev.key === 'ArrowUp'){ ev.preventDefault(); idx = (idx-1+arr.length)%arr.length; focusBtn(); }
+        else if (ev.key === 'Enter'){ ev.preventDefault(); arr[idx].click(); }
+        else if (ev.key === 'Escape'){ ev.preventDefault(); closePop(); document.removeEventListener('keydown', onKey); }
+      };
+      document.addEventListener('keydown', onKey, {once:false});
+      map.once('click', ()=>{ closePop(); document.removeEventListener('keydown', onKey); });
       return true;
     }
 
@@ -549,14 +562,23 @@
     }
     function clearAllFocus(){ map.closePopup(); clearHighlight(); clearSelect(); }
     function highlight(q){
-      clearHighlight(); const s=(q||'').trim().toLowerCase(); if(!s) return;
+      clearHighlight();
+      const sRaw=(q||'').trim().toLowerCase();
+      if(!sRaw) return;
+      // Normalize accents/diacritics for robust matching
+      const normalize = (str)=> (str||'').toLowerCase().normalize('NFD').replace(/\p{Diacritic}+/gu,'');
+      const tokens = normalize(sRaw).split(/\s+/).filter(Boolean);
       HILAYER=L.layerGroup().addTo(map);
       const bounds = [];
+      const matches = [];
       ALL_LINES.forEach(r=>{
-        const m=r.text.includes(s);
+        // Build normalized text for each record on the fly
+        const tnorm = normalize(r.text);
+        const m = tokens.every(tok => tnorm.includes(tok));
         r.line.setStyle({opacity: m ? 0.98 : 0.15});
-        r.hit.setStyle({opacity:m?0.05:0.001});
+        r.hit.setStyle({opacity: m ? 0.05 : 0.001});
         if(m){
+          matches.push(r);
           const path = r.line.getLatLngs();
           if (path && path.length){
             try{ bounds.push(L.latLngBounds(path)); }catch(e){}
@@ -568,6 +590,15 @@
         let B = bounds[0];
         for (let i=1;i<bounds.length;i++){ B = B.extend(bounds[i]); }
         try{ map.fitBounds(B.pad(0.12)); }catch(e){}
+      }
+      // If exactly one match, open its popup at the route midpoint
+      if (matches.length === 1){
+        try{
+          const rec = matches[0];
+          const path = rec.line.getLatLngs();
+          const mid = path && path[Math.floor(path.length/2)];
+          if (mid && rec.line && rec.line.openPopup) rec.line.openPopup(mid);
+        }catch(e){}
       }
     }
 
@@ -759,6 +790,15 @@
       };
       $('txtSearch').oninput   = e=>{ if(!e.target.value.trim()) clearHighlight(); };
       document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape'){ clearAllFocus(); } });
+      // Shortcuts: '/' or Ctrl+K to focus the search box
+      document.addEventListener('keydown', (e)=>{
+        if (e.target && (e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA' || e.target.isContentEditable)) return;
+        if (e.key === '/' || (e.ctrlKey && (e.key==='k' || e.key==='K')) ){
+          e.preventDefault();
+          const el = $('txtSearch'); if (el){ el.focus(); el.select(); }
+        }
+      });
+    
 
       $('btnPng').onclick=exportPNG; $('btnPdf').onclick=exportPDF;
       $('btnExport').onclick=()=>{ if(!DATA||!CITY_COORDS){ alert('Nada para exportar ainda.'); return; }
