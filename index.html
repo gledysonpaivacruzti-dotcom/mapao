@@ -312,11 +312,8 @@
         b.onclick=()=>{
           const c=cand[+b.dataset.i].rec;
           selectRoute(c,true);
-          try{
-            const where = (typeof closestPointOnRouteLatLng==='function') ? closestPointOnRouteLatLng(c, latlng) : latlng;
-            if (c && c.line && c.line.openPopup) c.line.openPopup(where || latlng);
-            else if (c && c.hit && c.hit.openPopup) c.hit.openPopup(where || latlng);
-          }catch(e){}
+          const where = (typeof closestPointOnRouteLatLng==='function') ? closestPointOnRouteLatLng(c, latlng) : latlng;
+          openRoutePopupAt(c, where || latlng);
           closePop();
         };
       });
@@ -339,6 +336,14 @@
         zoomControl:false, zoomSnap:0.25, zoomDelta:0.5, minZoom:3, maxZoom:20,
         preferCanvas:true, worldCopyJump:false, inertia:true
       }).setView([-5.5,-41.5],6);
+      // Popup defaults to avoid ficar escondido sob a toolbar
+      try{
+        L.Popup.prototype.options.autoPan = true;
+        L.Popup.prototype.options.keepInView = true;
+        L.Popup.prototype.options.autoPanPaddingTopLeft = [20, 130];
+        L.Popup.prototype.options.autoPanPadding = [24, 24];
+      }catch(e){}
+    
 
       CANV = L.canvas({padding:0.5});
 
@@ -364,7 +369,36 @@
     }
 
     /* =================== HELPERS =================== */
-    const rnd = v => Number(v).toFixed(5);
+
+    function closeAllPopups(){
+      try{ map.closePopup(); }catch(e){}
+      try{
+        if (Array.isArray(ALL_LINES)){
+          ALL_LINES.forEach(r=>{
+            try{ if(r.line && r.line.closePopup) r.line.closePopup(); }catch(e){}
+            try{ if(r.hit  && r.hit.closePopup)  r.hit.closePopup();  }catch(e){}
+          });
+        }
+      }catch(e){}
+    }
+    function openRoutePopupAt(rec, where){
+      if (!rec || !rec.line) return;
+      closeAllPopups();
+      try{
+        const p = rec.line.getPopup && rec.line.getPopup();
+        if (p && p.options){
+          p.options.autoPan = true;
+          p.options.keepInView = true;
+          if (!p.options.autoPanPaddingTopLeft) p.options.autoPanPaddingTopLeft = [20, 130];
+          if (!p.options.autoPanPadding) p.options.autoPanPadding = [24, 24];
+          if (!p.options.maxWidth) p.options.maxWidth = 420;
+        }
+      }catch(e){}
+      try{ if (where) map.panTo(where, {animate:true}); }catch(e){}
+      try{ rec.line.openPopup(where); }catch(e){}
+    }
+    
+        const rnd = v => Number(v).toFixed(5);
     const segKey = (a,b)=>{ const k1=rnd(a.lat)+','+rnd(a.lng), k2=rnd(b.lat)+','+rnd(b.lng); return (k1<k2)?(k1+'|'+k2):(k2+'|'+k1); };
     function getCoord(city){ const v=CITY_COORDS?.[city]; if(!v) return null; return Array.isArray(v)?{lat:+v[0],lng:+v[1]}:{lat:+v.lat,lng:+v.lng}; }
     function haversine(a,b){ const R=6371, toRad=d=>d*Math.PI/180; const dLat=toRad(b.lat-a.lat), dLng=toRad(b.lng-a.lng);
@@ -564,6 +598,7 @@
     }
     function clearAllFocus(){ map.closePopup(); clearHighlight(); clearSelect(); }
     function highlight(q){
+      closeAllPopups();
       clearHighlight();
       const sRaw=(q||'').trim().toLowerCase();
       if(!sRaw) return;
@@ -591,17 +626,38 @@
       if (bounds.length){
         let B = bounds[0];
         for (let i=1;i<bounds.length;i++){ B = B.extend(bounds[i]); }
-        try{ map.fitBounds(B.pad(0.12)); }catch(e){}
+        try{ map.fitBounds(B.pad(0.12)); }catch(e){} closeAllPopups();
       }
-      // If exactly one match, open its popup at the route midpoint
-      if (matches.length === 1){
-        try{
-          const rec = matches[0];
-          const path = rec.line.getLatLngs();
-          const mid = path && path[Math.floor(path.length/2)];
-          if (mid && rec.line && rec.line.openPopup) rec.line.openPopup(mid);
-        }catch(e){}
-      }
+      
+      
+// Open popup only after map finishes moving, avoids stale popups reappearing
+if (matches.length === 1){
+  const rec0 = matches[0];
+  let opened = false;
+  const openLater = ()=>{
+    if (opened) return; opened = true;
+    try{
+      const path = rec0.line.getLatLngs();
+      const mid  = path && path[Math.floor(path.length/2)];
+      openRoutePopupAt(rec0, mid);
+    }catch(e){}
+  };
+  if (bounds.length){
+    map.once('moveend', openLater);
+    setTimeout(openLater, 400); // fallback if no movement occurs
+  } else {
+    openLater();
+  }
+} else {
+  // Ensure no stale popup after moving when multiple matches
+  if (bounds.length){
+    map.once('moveend', ()=> closeAllPopups());
+  } else {
+    closeAllPopups();
+  }
+}
+
+      
     }
 
     /* =================== PARSER TOLERANTE (NOVO) =================== */
@@ -1023,10 +1079,10 @@
       $('btnAllClients').onclick=()=>{ Object.keys(CLIENT_VISIBLE).forEach(k=> CLIENT_VISIBLE[k]=true); render(); };
       $('btnNoClients').onclick =()=>{ Object.keys(CLIENT_VISIBLE).forEach(k=> CLIENT_VISIBLE[k]=false); render(); };
 
-      $('btnSearch').onclick = ()=> highlight($('txtSearch').value);
-      $('btnClear').onclick  = ()=>{ $('txtSearch').value=''; clearAllFocus(); };
+      $('btnSearch').onclick = ()=> { closeAllPopups(); highlight($('txtSearch').value); };
+      $('btnClear').onclick  = ()=>{ closeAllPopups(); $('txtSearch').value=''; clearAllFocus(); };
       $('txtSearch').onkeydown = e=>{
-        if(e.key==='Enter'){ e.preventDefault(); highlight(e.target.value); }
+        if(e.key==='Enter'){ e.preventDefault(); closeAllPopups(); highlight(e.target.value); }
         if(e.key==='Escape'){ clearAllFocus(); }
       };
       $('txtSearch').oninput   = e=>{ if(!e.target.value.trim()) clearHighlight(); };
