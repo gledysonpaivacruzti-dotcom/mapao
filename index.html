@@ -66,6 +66,8 @@
       <button id="btnExport">Exportar JSON</button>
       <button id="btnPng">Exportar PNG</button>
       <button id="btnPdf">Exportar PDF</button>
+      <button id="btnListPdf">Exportar Lista (PDF)</button>
+      <button id="btnListXls">Exportar Lista (Excel)</button>
       <button id="btnCenterMap">Centralizar</button>
     </div>
     <div class="group" style="margin-left:auto">
@@ -772,6 +774,245 @@
         pdf.addImage(dataUrl,'JPEG',x,y,w,h); pdf.save('mapadwdm.pdf');
       }catch(e){ hideUI(false); alert('Falha ao exportar PDF: '+e.message); }
     }
+    /* =================== EXPORTAR LISTA (PDF/EXCEL) =================== */
+    function buildChannelRows(){
+      const rows = [];
+      // Normalize search tokens (if any)
+      const qEl = $('txtSearch');
+      const q = qEl ? (qEl.value||'').trim() : '';
+      const normalize = (str)=> (str||'').toLowerCase().normalize('NFD').replace(/\p{Diacritic}+/gu,'');
+      const tokens = normalize(q).split(/\s+/).filter(Boolean);
+
+      // Prefer ALL_LINES (already filtered by cliente/tipos/visibilidade no render())
+      if (Array.isArray(ALL_LINES) && ALL_LINES.length){
+        for (const rec of ALL_LINES){
+          // If there is a search, only include matches consistent with highlight()
+          if (tokens.length){
+            const tnorm = normalize(rec.text);
+            const ok = tokens.every(tok => tnorm.includes(tok));
+            if (!ok) continue;
+          }
+          const canal = rec.canalRef || {};
+          const saltos = (rec.saltos||[]).slice();
+          // distance along the rendered path
+          let km = 0;
+          try{
+            const pts = (saltos||[]).map(getCoord).filter(Boolean);
+            for(let i=0;i<pts.length-1;i++){ km += map.distance(pts[i], pts[i+1]) / 1000.0; }
+          }catch(e){ km = 0; }
+          rows.push({
+            cliente: rec.cliente || '—',
+            canal: (canal.id||'').toUpperCase(),
+            tipo: (canal.tipo||'proprio'),
+            capacidade: (canal.capacidade||'—'),
+            parceiro: (canal.parceiro||'—'),
+            distancia: km,
+            saltos: saltos.join(' → ')
+          });
+        }
+      } else {
+        // Fallback: full DATA (shouldn't happen if render() ran)
+        if(!DATA?.clientes) return rows;
+        const distKm = (saltos)=>{
+          try{
+            let km = 0;
+            const pts = (saltos||[]).map(getCoord).filter(Boolean);
+            for(let i=0;i<pts.length-1;i++){ km += map.distance(pts[i], pts[i+1]) / 1000.0; }
+            return km;
+          }catch(e){ return 0; }
+        };
+        for (const [cliente, cfg] of Object.entries(DATA.clientes||{})){
+          const canais = (cfg && cfg.canais) || [];
+          for (const canal of canais){
+            const saltos = (canal.saltos||[]).slice();
+            const text = (cliente+' '+(canal.id||'')+' '+(canal.capacidade||'')+' '+(canal.tipo||'')+' '+(canal.parceiro||'')+' '+saltos.join(' ')).toLowerCase();
+            if (tokens.length){
+              const tnorm = normalize(text);
+              const ok = tokens.every(tok => tnorm.includes(tok));
+              if (!ok) continue;
+            }
+            rows.push({
+              cliente: cliente || '—',
+              canal: (canal.id||'').toUpperCase(),
+              tipo: (canal.tipo||'proprio'),
+              capacidade: (canal.capacidade||'—'),
+              parceiro: (canal.parceiro||'—'),
+              distancia: distKm(saltos),
+              saltos: saltos.join(' → ')
+            });
+          }
+        }
+      }
+
+      // stable sort by cliente then canal
+      rows.sort((a,b)=> (a.cliente.localeCompare(b.cliente) || a.canal.localeCompare(b.canal)));
+      return rows;
+    }
+
+    function exportListPDF(){
+      const rows = buildChannelRows();
+      if(!rows.length){ alert('Sem canais para exportar.'); return; }
+      const {jsPDF}=window.jspdf;
+      const pdf=new jsPDF({orientation:'landscape',unit:'pt',format:'a3',compress:true});
+      const W=pdf.internal.pageSize.getWidth(), H=pdf.internal.pageSize.getHeight();
+      const M=28;
+      const CW = W - 2*M;
+
+      // Column weights (sum ~= 1.0)
+      const weights = {
+        cliente:   0.12,
+        canal:     0.24,   // mais largo
+        tipo:      0.07,
+        capacidade:0.08,
+        parceiro:  0.12,
+        distancia: 0.07,
+        saltos:    0.30    // reduzido e com quebra
+      };
+      const cols = [
+        {key:'cliente',   title:'Cliente',     w: Math.round(CW*weights.cliente)},
+        {key:'canal',     title:'Canal',       w: Math.round(CW*weights.canal)},
+        {key:'tipo',      title:'Tipo',        w: Math.round(CW*weights.tipo)},
+        {key:'capacidade',title:'Capacidade',  w: Math.round(CW*weights.capacidade)},
+        {key:'parceiro',  title:'Parceiro',    w: Math.round(CW*weights.parceiro)},
+        {key:'distancia', title:'Dist. (km)',  w: Math.round(CW*weights.distancia)},
+        {key:'saltos',    title:'Saltos',      w: CW - (Math.round(CW*(weights.cliente+weights.canal+weights.tipo+weights.capacidade+weights.parceiro+weights.distancia))) }
+      ];
+
+      // Title
+      let y = M+16;
+      pdf.setFont('helvetica','bold'); pdf.setFontSize(15);
+      pdf.text('Lista de Canais DWDM', M, y); y += 14;
+      pdf.setFont('helvetica','normal'); pdf.setFontSize(9.5);
+      pdf.text('Gerado em: '+new Date().toLocaleString(), M, y); y += 10;
+
+      const drawHeader = () => {
+        y += 8;
+        pdf.setFillColor(240); pdf.rect(M, y, CW, 20, 'F');
+        pdf.setFont('helvetica','bold'); pdf.setFontSize(10.5);
+        let x = M+6; const headerY = y+14;
+        cols.forEach(c=>{ pdf.text(c.title, x, headerY); x += c.w; });
+        y += 24;
+        pdf.setFont('helvetica','normal'); pdf.setFontSize(9.5);
+      };
+
+      drawHeader();
+
+      // Hyphen/space aware wrapper
+      const wrap = (text, maxW) => {
+        const clean = String(text||'').replace(/→/g,'->'); // better PDF compatibility
+        const parts = clean.split(/(\s+|[-/_.])/); // keep delimiters
+        const lines = [];
+        let cur = '';
+        const limit = maxW - 8;
+        for (let i=0;i<parts.length;i++){
+          const piece = parts[i];
+          const test = cur ? (cur + piece) : piece;
+          const w = pdf.getTextWidth(test);
+          if (w > limit && cur){
+            lines.push(cur.trim());
+            cur = piece.trim();
+            // very long token fallback: hard-slice
+            if (pdf.getTextWidth(cur) > limit){
+              let token = cur, acc='';
+              for (let j=0;j<token.length;j++){
+                const t = acc + token[j];
+                if (pdf.getTextWidth(t) > limit){
+                  lines.push(acc);
+                  acc = token[j];
+                } else {
+                  acc = t;
+                }
+              }
+              cur = acc;
+            }
+          } else {
+            cur = test;
+          }
+        }
+        if (cur.trim()) lines.push(cur.trim());
+        return lines;
+      };
+
+      let zebra = false;
+      const drawRow = (r) => {
+        const vals = {
+          cliente: r.cliente,
+          canal:   r.canal,
+          tipo:    String(r.tipo||'').toUpperCase(),
+          capacidade: r.capacidade,
+          parceiro: r.parceiro,
+          distancia: (r.distancia||0).toFixed(1).replace('.',','),
+          saltos:  r.saltos
+        };
+
+        // Prepare wrapped cells
+        const cellLines = [
+          [String(vals.cliente)],
+          wrap(vals.canal, cols[1].w),
+          [String(vals.tipo)],
+          [String(vals.capacidade)],
+          wrap(vals.parceiro, cols[4].w),
+          [String(vals.distancia)],
+          wrap(vals.saltos, cols[6].w)
+        ];
+
+        const lineH = 16;
+        const nLines = Math.max(...cellLines.map(a=>a.length));
+        const rowH = nLines*lineH + 6;
+
+        // Page break with header repeat
+        if (y + rowH + M > H){
+          pdf.addPage();
+          y = M+16;
+          drawHeader();
+        }
+
+        // Zebra background
+        if (zebra){ pdf.setFillColor(250); pdf.rect(M, y-2, CW, rowH, 'F'); }
+        zebra = !zebra;
+
+        // Draw text
+        let x = M+6;
+        for (let c=0;c<cols.length;c++){
+          const segs = cellLines[c];
+          for (let k=0;k<segs.length;k++){
+            pdf.text(segs[k], x, y + (k*lineH));
+          }
+          x += cols[c].w;
+        }
+        y += rowH;
+      };
+
+      rows.forEach(drawRow);
+      pdf.save('canais_dwdm_lista.pdf');
+    }
+
+    function exportListXLS(){
+      const rows = buildChannelRows();
+      if(!rows.length){ alert('Sem canais para exportar.'); return; }
+      // Build an HTML table that Excel abre normalmente (.xls)
+      const escape = (s)=> String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const headers = ['Cliente','Canal','Tipo','Capacidade','Parceiro','Dist. (km)','Saltos'];
+      const trh = '<tr>' + headers.map(h=>'<th style=\"text-align:left\">'+h+'</th>').join('') + '</tr>';
+      const trs = rows.map(r=>'<tr>' + [
+        escape(r.cliente),
+        escape(r.canal),
+        escape(String(r.tipo||'').toUpperCase()),
+        escape(r.capacidade),
+        escape(r.parceiro),
+        (r.distancia||0).toFixed(1).replace('.',','),
+        escape(r.saltos)
+      ].map(v=>'<td>'+v+'</td>').join('') + '</tr>').join('');
+      const htmlTable = '<table border=\"1\">'+trh+trs+'</table>';
+      const htmlDoc = '<html><head><meta charset=\"utf-8\"></head><body>'+htmlTable+'</body></html>';
+      const blob = new Blob([htmlDoc], {type:'application/vnd.ms-excel'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'canais_dwdm_lista.xls';
+      a.click();
+      setTimeout(()=> URL.revokeObjectURL(a.href), 1000);
+    }
+
 
     /* =================== UI =================== */
     function initUI(){
@@ -800,7 +1041,7 @@
       });
     
 
-      $('btnPng').onclick=exportPNG; $('btnPdf').onclick=exportPDF;
+      $('btnPng').onclick=exportPNG; $('btnPdf').onclick=exportPDF; $('btnListPdf').onclick=exportListPDF; $('btnListXls').onclick=exportListXLS;
       $('btnExport').onclick=()=>{ if(!DATA||!CITY_COORDS){ alert('Nada para exportar ainda.'); return; }
         const blob=new Blob([JSON.stringify({CITY_COORDS,DATA},null,2)],{type:'application/json'}); const a=document.createElement('a');
         a.href=URL.createObjectURL(blob); a.download='mapadwdm_atualizado.json'; a.click(); URL.revokeObjectURL(a.href); };
