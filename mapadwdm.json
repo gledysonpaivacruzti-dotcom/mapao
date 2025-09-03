@@ -22291,7 +22291,6 @@
     "Baixa do Cajueiro": {
       "lat": -5.361587281895501,
       "lng": -41.35374267301289
-    
     },
     "Massalina-MA": {
       "lat": -2.7305776580378582,
@@ -22566,7 +22565,56 @@
               "Parnaiba-PI",
               "Buriti dos Lopes-PI",
               "Sao Bernardo-MA",
-              "Sobradinho"
+              "Sobradinho-MA"
+            ]
+          },
+          {
+            "id": "DWDM-CH25-SÃO LUIS<>SOBRADINHO",
+            "tipo": "proprio",
+            "capacidade": "400G",
+            "parceiro": "",
+            "saltos": [
+              "Sao Luis-MA",
+              "Morros-MA",
+              "Massalina-MA",
+              "Sobradinho-MA"
+            ]
+          },
+          {
+            "id": "DWDM-CH45/46-FORTALEZA<>TERESINA",
+            "tipo": "cedido",
+            "capacidade": "400G",
+            "parceiro": "Megalink",
+            "saltos": [
+              "Fortaleza-CE",
+              "Ascenty-CE",
+              "Umirim-CE",
+              "Marco-CE",
+              "Sobral-CE",
+              "Tiangua-CE",
+              "Piracuruca-PI",
+              "Piripiri-PI",
+              "Campo Maior-PI",
+              "Teresina-PI"
+            ]
+          },
+          {
+            "id": "DWDM-CH50-FORTALEZA<>TERESINA",
+            "tipo": "cedido",
+            "capacidade": "200G",
+            "parceiro": "Jupiter",
+            "saltos": [
+              "Fortaleza-CE",
+              "Umirim-CE",
+              "Marco-CE",
+              "Sobral-CE",
+              "Tiangua-CE",
+              "Vicosa do Ceara-CE",
+              "Buriti dos Lopes-PI",
+              "Sao Bernardo-MA",
+              "Batalha-PI",
+              "Jose de Freitas-PI",
+              "Teresina-PI"
             ]
           }
         ]
