@@ -15,7 +15,7 @@
     "Recife-PE": {
       "lat": -8.04666,
       "lng": -34.8771
-    },
+    },morr
     "Salvador-BA": {
       "lat": -12.9718,
       "lng": -38.5011
@@ -22291,6 +22291,15 @@
     "Baixa do Cajueiro": {
       "lat": -5.361587281895501,
       "lng": -41.35374267301289
+    
+    },
+    "Massalina-MA": {
+      "lat": -2.7305776580378582,
+      "lng": -43.53225573673809
+    },
+    "Sobradinho-MA": {
+      "lat": -2.858451843583195,
+      "lng": -42.91325672870646
     }
   },
   "DATA": {
@@ -22420,6 +22429,144 @@
               "Buriti dos Lopes-PI",
               "Vicosa do Ceara-CE",
               "Tiangua-CE"
+            ]
+          },
+          {
+            "id": "DWDM-CH29/30/39-GLOBENET<>PARNAIBA",
+            "tipo": "proprio",
+            "capacidade": "200G",
+            "parceiro": "",
+            "saltos": [
+              "Fortaleza-CE",
+              "Ascenty-CE",
+              "Umirim-CE",
+              "Marco-CE",
+              "Acarau-CE",
+              "Granja-CE",
+              "Chaval-CE",
+              "Parnaiba-PI"
+            ]
+          },
+          {
+            "id": "DWDM-CH32/34/48-SOBRAL<>TERESINA",
+            "tipo": "recebido",
+            "capacidade": "400G",
+            "parceiro": "Megalink",
+            "saltos": [
+              "Sobral-CE",
+              "Tiangua-CE",
+              "Piracuruca-PI",
+              "Piripiri-PI",
+              "Campo Maior-PI",
+              "Teresina-PI"
+            ]
+          },
+          {
+            "id": "DWDM-CH36/38-SOBRAL<>PARNAIBA PRINCIPAL",
+            "tipo": "proprio",
+            "capacidade": "400G",
+            "parceiro": "",
+            "saltos": [
+              "Parnaiba-PI",
+              "Chaval-CE",
+              "Granja-CE",
+              "Acarau-CE",
+              "Sobral-CE"
+            ]
+          },
+          {
+            "id": "DWDM-CH36/38-SOBRAL<>PARNAIBA PROTECÃO",
+            "tipo": "proprio",
+            "capacidade": "400G",
+            "parceiro": "",
+            "saltos": [
+              "Parnaiba-PI",
+              "Buriti dos Lopes-PI",
+              "Vicosa do Ceara-CE",
+              "Tiangua-CE",
+              "Sobral-CE"
+            ]
+          },
+          {
+            "id": "DWDM-CH33/54/58-TERESINA<>ALTO ALEGRE DO MARANHÃO",
+            "tipo": "recebido",
+            "capacidade": "400G",
+            "parceiro": "Giga+",
+            "saltos": [
+              "Teresina-PI",
+              "Caxias-MA",
+              "Codo-MA",
+              "Alto Alegre do Maranhao-MA"
+            ]
+          },
+          {
+            "id": "DWDM-CH40/41-MIRANDA DO NORTE<>CHAPADINHA",
+            "tipo": "recebido",
+            "capacidade": "400G",
+            "parceiro": "Giga+",
+            "saltos": [
+              "Chapadinha-MA",
+              "Vargem Grande-MA",
+              "Itapecuru Mirim-MA",
+              "Miranda do Norte-MA"
+            ]
+          },
+          {
+            "id": "DWDM-CH40/41-PARNAIBA<>CHAPADINHA",
+            "tipo": "recebido",
+            "capacidade": "400G",
+            "parceiro": "Giga+",
+            "saltos": [
+              "Parnaiba-PI",
+              "Buriti dos Lopes-PI",
+              "Sao Bernardo-MA",
+              "Brejo-MA",
+              "Anapurus-MA"
+            ]
+          },
+          {
+            "id": "DWDM-CH50-SOBRAL<>PIRIPIRI",
+            "tipo": "recebido",
+            "capacidade": "400G",
+            "parceiro": "Giga+",
+            "saltos": [
+              "Sobral-CE",
+              "Tiangua-CE",
+              "Piripiri-PI"
+            ]
+          },
+          {
+            "id": "DWDM-CH54/56-MIRANDA DO NORTE<>ALTO ALEGRE DO MARANHÃO",
+            "tipo": "recebido",
+            "capacidade": "400G",
+            "parceiro": "Giga+",
+            "saltos": [
+              "Alto Alegre do Maranhao-MA",
+              "Miranda do Norte-MA"
+            ]
+          },
+          {
+            "id": "DWDM-CH25-SÃO LUIS<>SOBRADINHO",
+            "tipo": "proprio",
+            "capacidade": "400G",
+            "parceiro": "",
+            "saltos": [
+              "Sao Luis-MA",
+              "Morros",
+              "Massalina",
+              "Sobradinho"
+            ]
+          },
+          {
+            "id": "DWDM-CH27-SOBRADINHO<>PARNAIBA",
+            "tipo": "proprio",
+            "capacidade": "400G",
+            "parceiro": "",
+            "saltos": [
+              "Parnaiba-PI",
+              "Buriti dos Lopes-PI",
+              "Sao Bernardo-MA",
+              "Sobradinho"
             ]
           }
         ]
