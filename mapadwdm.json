@@ -10521,8 +10521,8 @@
       "lng": -39.3076
     },
     "Juazeiro do Piaui-PI": {
-      "lat": -5.17459,
-      "lng": -41.6976
+      "lat": -5.171187704396677,
+      "lng": -41.704331
     },
     "Jucas-CE": {
       "lat": -6.51523,
@@ -22299,6 +22299,14 @@
     "Sobradinho-MA": {
       "lat": -2.858451843583195,
       "lng": -42.91325672870646
+    },
+    "Baixa do Cajueiro-PI": {
+      "lat": -5.361210270610992,
+      "lng": -41.35361808465808
+    },
+    "Cova Donga-PI": {
+      "lat": -6.536945727335549,
+      "lng": -40.79635318650645
     }
   },
   "DATA": {
@@ -22616,6 +22624,19 @@
               "Jose de Freitas-PI",
               "Teresina-PI"
             ]
+          },
+          {
+            "id": "DWDM-CH56-SÃO LUIS<>MIRANDA DO NORTE",
+            "tipo": "proprio",
+            "capacidade": "400G",
+            "parceiro": "",
+            "saltos": [
+              "Sao Luis-MA",
+              "Rosario-MA",
+              "Santa Rita-MA",
+              "Itapecuru Mirim-MA",
+              "Miranda do Norte-MA"
+            ]
           }
         ]
       },
@@ -22633,11 +22654,92 @@
       },
       "Virtex": {
         "color": "#2db7d2",
-        "canais": []
+        "canais": [
+          {
+            "id": "DWDM-CH21-CRATEUS<>TERESINA",
+            "tipo": "proprio",
+            "capacidade": "200G",
+            "parceiro": "",
+            "saltos": [
+              "Teresina-PI",
+              "Alto Longa-PI",
+              "Juazeiro do Piaui-PI",
+              "Baixa do Cajueiro-PI",
+              "Crateus-CE"
+            ]
+          },
+          {
+            "id": "DWDM-CH21-CRATEUS<>PICOS",
+            "tipo": "proprio",
+            "capacidade": "200G",
+            "parceiro": "",
+            "saltos": [
+              "Crateus-CE",
+              "Quiterianopolis-CE",
+              "Cova Donga-PI",
+              "Picos-PI"
+            ]
+          },
+          {
+            "id": "DWDM-CH21-PICOS<>ARARIPINA",
+            "tipo": "proprio",
+            "capacidade": "200G",
+            "parceiro": "",
+            "saltos": [
+              "Picos-PI",
+              "Campo Grande do Piaui-PI",
+              "Araripina-PE"
+            ]
+          }
+        ]
       },
       "Online": {
         "color": "#d22d86",
-        "canais": []
+        "canais": [
+          {
+            "id": "DWDM-CH57/58/59-ARARENDA<>PORANGA",
+            "tipo": "proprio",
+            "capacidade": "100G",
+            "parceiro": "",
+            "saltos": [
+              "Ararenda-CE",
+              "Poranga-CE"
+            ]
+          },
+          {
+            "id": "DWDM-CH21-ARARENDA<>PIRIPIRI",
+            "tipo": "proprio",
+            "capacidade": "400G",
+            "parceiro": "",
+            "saltos": [
+              "Ararenda-CE",
+              "Poranga-CE",
+              "Pedro II-PI",
+              "Piripiri-PI"
+            ]
+          },
+          {
+            "id": "DWDM-CH57/58/59-PEDRO II<>PIRIPIRI",
+            "tipo": "proprio",
+            "capacidade": "100G",
+            "parceiro": "",
+            "saltos": [
+              "Pedro II-PI",
+              "Piripiri-PI"
+            ]
+          },
+          {
+            "id": "DWDM-CH21/25/54/56-PIRIPIRI<>PORANGA",
+            "tipo": "proprio",
+            "capacidade": "100G",
+            "parceiro": "",
+            "saltos": [
+              "Piripiri-PI",
+              "Pedro II-PI",
+              "Poranga-CE"
+            ]
+          }
+        ]
       }
     }
   }
